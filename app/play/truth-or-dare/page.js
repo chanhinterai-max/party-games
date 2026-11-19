@@ -95,7 +95,7 @@ export default function TruthOrDare() {
         </div>
         <div className="section">
           <div className="row" style={{ alignItems: 'center' }}>
-            <div className="label" style={{ margin: 0 }}>Who&apos;s playing?</div>
+            <div className="label" style={{ margin: 0 }}>Who’s playing?</div>
             <div className="count" style={{ textAlign: 'right' }}>{names.length} / {MAX}</div>
           </div>
           <div className="players" style={{ marginTop: 10 }}>
@@ -129,7 +129,7 @@ export default function TruthOrDare() {
         <div className="section">
           <button className="btn btn-primary" data-act="start" disabled={busy} onClick={start}>{busy ? 'Starting…' : "Let's play 🔥"}</button>
         </div>
-        <aside className="note">Don&apos;t want a card? Drink instead: a small sip, and <strong>water counts</strong>.</aside>
+        <aside className="note">Don’t want a card? Drink instead: a small sip, and <strong>water counts</strong>.</aside>
       </>
     );
   }
