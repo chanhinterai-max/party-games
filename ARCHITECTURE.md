@@ -94,7 +94,8 @@ party-games/
 
 | Name | Purpose |
 |---|---|
-| `DATABASE_URL` | Neon Postgres connection string, added by the Neon Marketplace integration |
+| `DATABASE_URL` | Neon Postgres connection string (pooled), added by the Neon Marketplace integration `party-games-db`. Fallbacks if renamed: `POSTGRES_URL`, `POSTGRES_PRISMA_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL_NON_POOLING` |
+| `PGHOST`, `PGHOST_UNPOOLED`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Also added by Neon; not used by the app directly |
 | `ADMIN_SETUP_SECRET` | Long random secret required by `/api/setup` to create the first admin (one time) |
 
 ## Request flow
