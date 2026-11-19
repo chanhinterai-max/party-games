@@ -123,14 +123,14 @@ export default function Admin() {
       <section className="panel"><DrinksEditor /></section>
 
       <section className="panel" data-section="rooms">
-        <h3>Live rooms (last 12h) <button className="small-btn" onClick={refresh}>↻</button></h3>
+        <h3>Live rooms (active, played in the last hour) <button className="small-btn" onClick={refresh}>↻</button></h3>
         {rooms.length === 0 && <p className="count">No live rooms.</p>}
         <table className="table"><tbody>
           {rooms.map((r) => (
             <tr key={r.code}>
               <td><Link href={`/room/${r.code}`}><strong style={{ fontFamily: 'ui-monospace, monospace' }}>{r.code}</strong></Link></td>
-              <td>{r.level} · {r.players.length} players<div className="count">now: {r.current} · {r.turns} turns</div></td>
-              <td className="count">{new Date(r.updatedAt).toLocaleTimeString()}</td>
+              <td>{r.level} · {r.players.length} players<div className="count">now: {r.current} · {r.turns} turns · {r.questionsLeft} left</div></td>
+              <td className="count">{new Date(r.lastActivity || r.updatedAt).toLocaleTimeString()}</td>
             </tr>
           ))}
         </tbody></table>

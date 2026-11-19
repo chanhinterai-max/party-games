@@ -12,13 +12,13 @@ flowchart LR
     D["Admin /admin<br/>account, users, question bank,<br/>chicken odds + hidden rule, games, rooms, audit"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
-    R1["/api/rooms/*<br/>create, draw / done / chicken / level"]
+    R1["/api/rooms/*<br/>create, draw / done / chicken / level / end<br/>lazy 1 h idle close · results"]
     R2["/api/rooms/[code]/queue<br/>/api/me/categories · /api/drinks"]
     R3["/api/auth/* · /api/setup"]
-    R4["/api/admin/*<br/>account, users, bank, chicken-odds, games, rooms, audit"]
-    L["lib/: game · bank · settings · categories · auth · db"]
+    R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration, games, rooms, audit"]
+    L["lib/: game · results · bank · settings · categories · auth · db"]
   end
-  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what · bank_where<br/>user_categories · settings (drinks, odds)")]
+  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what · bank_where<br/>user_categories · settings (drinks, odds, pet)")]
   P -- "JSON + x-room-token" --> R1
   A -- "httpOnly session cookie" --> R2
   D -- "httpOnly session cookie" --> R4
@@ -35,8 +35,8 @@ party-games/
 │   ├── layout.js                     Site shell; Login button top-right (components/AuthButton.js)
 │   ├── page.js                       Home: game tiles, hides games disabled by the admin
 │   ├── globals.css                   Neon/dark mobile-first styles (+ gender dots, chicken modal, animals)
-│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names + Male/Female, level, room code, Truth/Dare,
-│   │                                 Next, Chicken out 🐔 reveal, running animals
+│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names + Male/Female, level, room code, questions left,
+│   │                                 Truth/Dare, Next, Chicken out 🐔, running animals, End game, results
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
 │   ├── room/page.js                  Enter a room code
@@ -47,9 +47,10 @@ party-games/
 │       ├── games/route.js            GET enabled games (public)
 │       ├── rooms/route.js            POST create room (players with gender) → code + host token
 │       ├── rooms/[code]/route.js     GET public room state (no odds / rule ever exposed)
-│       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted[]} | level (host token)
+│       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted:[{id,elapsedMs}]} | level | end (host token)
 │       ├── rooms/[code]/queue/route.js   GET/PUT hidden question queues (advanced/admin)
 │       ├── me/categories/…           QUICK CATEGORIES: GET/POST, PATCH/DELETE [id] (own only)
+│       ├── config/route.js           GET public UI config (petted duration seconds)
 │       ├── drinks/route.js           DRINK OPTIONS: GET/PUT global chicken-out drinks (advanced/admin)
 │       ├── auth/login|logout|me/route.js  Session login/logout/current user
 │       ├── setup/route.js            One-time admin bootstrap (refuses once an admin exists)
@@ -60,7 +61,7 @@ party-games/
 │           ├── users/[id]/password/route.js  POST reset password (revokes sessions)
 │           ├── bank/route.js         QUESTION BANK: GET all / POST add WHO|WHAT|WHERE
 │           ├── bank/[kind]/[id]/route.js  PATCH edit / DELETE bank entry
-│           ├── chicken-odds/route.js ANIMAL RULE: GET/PUT normal odds + hidden petted-animal rule
+│           ├── chicken-odds/route.js ANIMAL RULE: GET/PUT odds, hidden rule, petted duration (3-300 s)
 │           ├── games/route.js        GET/PATCH home-page game toggles
 │           ├── rooms/route.js        GET live rooms (last 12h)
 │           └── audit/route.js        GET last 100 audit entries
@@ -70,6 +71,7 @@ party-games/
 │   ├── CategoryManager.js            Add/edit/delete own quick categories
 │   ├── DrinksEditor.js               Global chicken-out drink options
 │   ├── GenderDot.js                  Blue (male) / pink (female) solid circle next to names
+│   ├── Results.js                    End-of-game results (awards, titles, pairs) for players + advanced view
 │   ├── RunningAnimals.js             CSS-animated baby animals; tap = petted 20 s (reduced-motion aware)
 │   ├── admin/AccountPanel.js         Change own username / password
 │   ├── admin/BankPanel.js            Manage WHO / WHAT / WHERE bank
@@ -80,10 +82,12 @@ party-games/
 │   │                                 templates), private-part blocklist, animals, default drinks/odds,
 │   │                                 default "Flirty default" category
 │   ├── bank.js                       QUESTION BANK (DB): load + validated CRUD for bank_who/what/where
-│   ├── settings.js                   DRINK OPTIONS + ANIMAL RULE (settings table) + server-side drink pick
+│   ├── settings.js                   SETTINGS: drink options, odds + animal rule, petted duration (settings
+│   │                                 table); server-side drink pick + petted-window check
 │   ├── categories.js                 QUICK CATEGORIES (user_categories table), per-user seeding
-│   ├── game.js                       ROOM/QUEUE LOGIC: codes, genders, queue generation from DB bank,
-│   │                                 turn rotation, draw/done/chicken/level, queue edit validation
+│   ├── game.js                       ROOM/QUEUE LOGIC: codes, genders, queues (players × 10), question budget,
+│   │                                 turns, draw/done/chicken/level/end, lazy idle close, per-turn stats
+│   ├── results.js                    STATS/RESULTS LOGIC: state.stats shape, awards, ties, funny titles, pairs
 │   ├── auth.js                       SESSION/AUTH LOGIC: Argon2id, login + lockout, IP throttling,
 │   │                                 session tokens (SHA-256 in DB), roles, audit log
 │   ├── db.js                         DATABASE SCHEMA + idempotent migrations + first-run bank seeding
@@ -104,6 +108,9 @@ party-games/
 | Chicken-out drink options | `settings` row `drinks` (global; edited by advanced players and admins) |
 | Chicken odds + hidden animal rule | `settings` row `odds` (admin only; outcome picked server-side in `lib/settings.js`) |
 | Player genders | `rooms.genders` JSONB (name → male/female) |
+| Petted duration (= secret-rule window) | `settings` row `pet` = `{seconds}` (default 20, 3-300) |
+| Room lifecycle | `rooms.status` (active / ended / closed), `closed_reason` (complete / host / idle), `ended_at`, `last_activity` (last Truth/Dare pick) |
+| Per-turn stats | `rooms.state.stats` (per player: truths, dares, done, chicken, drinks by category; pair interaction counts) + `rooms.history` (each turn with resolved WHO `target`, result, drink) |
 | Account + password schema | `users` table in `lib/db.js` (`password_hash` = Argon2id) |
 | **Passwords** | Only as Argon2id hashes in the Postgres `users` table. There is no password file in the repo. |
 | Sessions | `sessions` table: SHA-256 of a random 256-bit token; the raw token is only in an httpOnly cookie `pg_session` (Secure, SameSite=Lax, 12h) |
@@ -131,9 +138,16 @@ party-games/
    3 s) and drags WHO/WHAT/WHERE chips or whole questions; every change is saved with `PUT /api/rooms/[code]/queue`
    (validated server-side, audit-logged).
 4. **Chicken out 🐔**: the player screen sends `{action:'chicken', petted:[animal ids]}`; the server picks the drink
-   category with the configured odds (switching to the rule odds if the rule's target animal is petted) and a random
+   category with the configured odds (switching to the rule odds only if the target animal was petted less than the
+   configured petted duration ago, + 2 s tolerance; the client sends elapsed ms, so device clocks don't matter) and a random
    option text. Only the result comes back; odds and the rule are never sent to players.
-5. **Admin** manages own account, advanced users, the question bank, odds/rule, games and live rooms at `/admin`.
+5. **Questions per room** = players × 10. Each queue (truth, dare) is built with that many items on creation and on a
+   level change; the game ends automatically once that many questions have been played, or when the host taps End game.
+6. **Idle timeout**: every room read/action/poll first runs `closeIfIdle` (status → closed when `last_activity` is over
+   1 h old); the admin live-rooms list closes all idle rooms and lists only active ones. No cron.
+7. **Results** are computed from `state.stats` (`lib/results.js`) whenever a room is not active, and shown to the
+   player device and in the advanced room view.
+8. **Admin** manages own account, advanced users, the question bank, odds/rule, games and live rooms at `/admin`.
 
 ## Security summary
 

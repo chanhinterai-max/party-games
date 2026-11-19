@@ -329,3 +329,17 @@ textarea.input { min-height: 90px; padding: 10px 14px; width: 100%; font-family:
 .odds-grid > span { grid-column: 1 / -1; font-size: .85rem; }
 .chip .x { background: none; border: 0; color: inherit; margin-left: 4px; cursor: pointer; opacity: .7; }
 .field textarea { min-height: 70px; width: 100%; resize: vertical; }
+/* ---------- v4: results ---------- */
+.results { margin-top: 14px; }
+.results-title { text-align: center; font-size: 1.8rem; margin: 6px 0 0; text-shadow: 0 0 18px rgba(255,179,64,.6); }
+.awards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.award { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 12px; text-align: center; }
+.aw-label { font-size: .78rem; font-weight: 800; letter-spacing: .04em; color: var(--amber); text-transform: uppercase; }
+.aw-who { font-weight: 800; margin: 6px 0 2px; }
+.titles { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.titles li { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 12px 14px; }
+.t-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.t-name { margin-left: auto; font-weight: 800; color: var(--pink); }
+.t-line { margin: 4px 0; font-size: .92rem; }
+.qleft { text-align: center; font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
+.closed-banner { border: 1.5px solid var(--amber); border-radius: 16px; padding: 10px 14px; text-align: center; font-weight: 800; margin: 10px 0; }

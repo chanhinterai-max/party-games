@@ -5,6 +5,7 @@ import { api } from '@/components/api';
 import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
 import GenderDot, { WithDot } from '@/components/GenderDot';
 import RunningAnimals from '@/components/RunningAnimals';
+import Results from '@/components/Results';
 
 const STORE_PLAYERS = 'partygames.tod.players.v3';
 const STORE_LEVEL = 'partygames.tod.level';
@@ -26,10 +27,12 @@ export default function TruthOrDare() {
   const [toast, setToast] = useState('');
   const [reveal, setReveal] = useState(null);
   const toastTimer = useRef();
-  const petted = useRef([]);
-  const onPetted = useCallback((list) => { petted.current = list; }, []);
+  const [petMs, setPetMs] = useState(20000);
+  const petted = useRef({}); // id -> pet start (performance.now())
+  const onPetted = useCallback((map) => { petted.current = map; }, []);
 
   useEffect(() => {
+    api('/api/config').then((d) => d?.petSeconds && setPetMs(d.petSeconds * 1000)).catch(() => {});
     let p = load(STORE_PLAYERS, null);
     if (!Array.isArray(p)) {
       const old = load('partygames.tod.players', []);
@@ -88,13 +91,16 @@ export default function TruthOrDare() {
       return d.room;
     } catch (e) {
       flash(e.message);
+      if (e.status === 409) api(`/api/rooms/${room.code}`).then((d) => setRoom(d.room)).catch(() => {});
     } finally {
       setBusy(false);
     }
   }
 
   async function chickenOut() {
-    const r = await act({ action: 'chicken', petted: petted.current });
+    const now = performance.now();
+    const pets = Object.entries(petted.current).map(([id, start]) => ({ id, elapsedMs: Math.round(now - start) }));
+    const r = await act({ action: 'chicken', petted: pets });
     if (r?.lastChicken) setReveal(r.lastChicken);
   }
 
@@ -104,7 +110,13 @@ export default function TruthOrDare() {
     setToken(null);
   }
 
-  const animals = <RunningAnimals onPettedChange={onPetted} />;
+  async function endByHost() {
+    if (!confirm('End the game now and show the results?')) return;
+    await act({ action: 'end' });
+    window.scrollTo(0, 0);
+  }
+
+  const animals = <RunningAnimals onPettedChange={onPetted} petMs={petMs} />;
 
   if (!room) {
     const lvl = LEVELS.find((l) => l.id === level);
@@ -165,6 +177,23 @@ export default function TruthOrDare() {
 
   const lvl = LEVELS.find((l) => l.id === room.level) || LEVELS[0];
   const card = room.card;
+  if (room.status && room.status !== 'active') {
+    const lc = room.lastChicken && DRINK_CATEGORIES.find((c) => c.id === room.lastChicken.category);
+    return (
+      <>
+        <div className="topbar" style={{ marginTop: 8 }}>
+          <Link className="icon-btn" href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>← Games</Link>
+          <span className={`badge ${lvl.id}`}>{lvl.emoji} {lvl.name}</span>
+          <button className="icon-btn" data-act="end" onClick={endGame}>New game</button>
+        </div>
+        <p className="room-code">Room code<b data-room-code>{room.code}</b></p>
+        {reveal && lc && <div className="closed-banner">🐔 {reveal.player}: {lc.emoji} {reveal.text}</div>}
+        <Results room={room} />
+        <div className="section"><button className="btn btn-primary" data-act="new-game" onClick={endGame}>Play again 🔁</button></div>
+        <p className="footer">Drink responsibly. Water always counts. 💜</p>
+      </>
+    );
+  }
   const g = room.genders || {};
   const cat = reveal && DRINK_CATEGORIES.find((c) => c.id === reveal.category);
   return (
@@ -176,6 +205,7 @@ export default function TruthOrDare() {
         <button className="icon-btn" data-act="end" onClick={endGame}>New game</button>
       </div>
       <p className="room-code">Room code<b data-room-code>{room.code}</b></p>
+      <p className="qleft" data-questions-left={room.questionsLeft}>{room.questionsLeft} of {room.total} questions left</p>
       <div className="turn">
         <div className="pass">{card ? 'Your card' : 'Pass the phone to'}</div>
         <div className="who"><GenderDot gender={g[room.current]} />{room.current}{card ? '' : '’s turn'}</div>
@@ -217,6 +247,7 @@ export default function TruthOrDare() {
       <div className="scores" aria-label="Chicken-outs">
         {room.players.map((p) => <span key={p}><GenderDot gender={g[p]} />{p} · {room.sips?.[p] || 0} 🐔</span>)}
       </div>
+      <div className="section"><button className="btn btn-ghost" data-act="end-game" disabled={busy} onClick={endByHost}>End game 🏁</button></div>
       <p className="footer">Drink responsibly. Water always counts. 💜</p>
       {reveal && (
         <div className="modal-back" onClick={() => setReveal(null)}>

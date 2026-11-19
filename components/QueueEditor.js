@@ -6,6 +6,7 @@ import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
 import GenderDot, { WithDot } from './GenderDot';
 import CategoryManager from './CategoryManager';
 import DrinksEditor from './DrinksEditor';
+import Results from './Results';
 
 const hexId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('');
 const shortWhat = (t) => t.replaceAll('{who}', 'WHO').replaceAll('{where}', 'WHERE');
@@ -205,6 +206,22 @@ export default function QueueEditor({ code }) {
   };
   const hov = (drop, idx, field = '') => hover && hover.key === `${drop}:${idx}:${field}`;
 
+  if (room.status && room.status !== 'active') {
+    return (
+      <>
+        <div className="topbar" style={{ marginTop: 8 }}>
+          <Link className="icon-btn" href="/room" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>← Rooms</Link>
+          <span className={`badge ${room.level}`}>{lvl?.emoji} {lvl?.name}</span>
+        </div>
+        <p className="room-code">Room<b>{room.code}</b></p>
+        <div className="closed-banner" data-room-status={room.status}>
+          {room.closedReason === 'idle' ? '💤 Room closed (1 hour without play)' : '🏁 Game over'} · {room.turn} turns
+        </div>
+        <Results room={room} />
+      </>
+    );
+  }
+
   return (
     <>
       <div className="topbar" style={{ marginTop: 8 }}>
@@ -214,7 +231,7 @@ export default function QueueEditor({ code }) {
       <p className="room-code">Room<b>{room.code}</b></p>
 
       <div className="live-card section" data-live>
-        <div className="label">Live · turn {room.turn}</div>
+        <div className="label">Live · turn {room.turn} · <span data-live-left>{room.questionsLeft}/{room.total} questions left</span></div>
         <div><strong data-live-current><GenderDot gender={genders[room.current]} />{room.current}</strong>’s turn</div>
         {room.card ? <p data-live-card style={{ margin: '8px 0 0' }}>{room.card.type === 'truth' ? '🤫' : '🔥'} <WithDot text={room.card.text} name={room.card.whoRef?.kind === 'player' ? room.card.who : null} gender={genders[room.card.who]} /></p> : <p className="count" style={{ margin: '8px 0 0' }}>Choosing Truth or Dare…</p>}
         {room.lastChicken && <p className="count" data-live-chicken style={{ margin: '6px 0 0' }}>🐔 {room.lastChicken.player} chickened out: {DRINK_CATEGORIES.find((c) => c.id === room.lastChicken.category)?.name} · {room.lastChicken.text}</p>}

@@ -2,29 +2,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { ANIMALS } from '@/lib/content';
 
-const PET_MS = 20000;
 // Lanes: [top %, duration s, delay s, direction]
 const LANES = [
   [14, 17, 0, 1], [32, 22, 6, -1], [58, 19, 3, 1], [76, 24, 10, -1], [88, 20, 14, 1],
 ];
 
-// Lightweight emoji + CSS animation. Tapping an animal pauses it for 20 s with hearts.
-// onPettedChange(list of animal ids currently petted) lets the game send it with actions.
-export default function RunningAnimals({ onPettedChange }) {
-  const [petted, setPetted] = useState({}); // id -> until timestamp
+// Lightweight emoji + CSS animation. Tapping an animal pauses it for petMs (admin-set, default 20 s) with hearts.
+// onPettedChange({ id: petStart (performance.now()) }) lets the game send elapsed times with actions.
+export default function RunningAnimals({ onPettedChange, petMs = 20000 }) {
+  const [petted, setPetted] = useState({}); // id -> pet start (performance.now())
   const timers = useRef({});
 
   useEffect(() => {
-    onPettedChange?.(Object.keys(petted));
+    onPettedChange?.(petted);
   }, [petted, onPettedChange]);
   useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
 
   function pet(id) {
     clearTimeout(timers.current[id]);
-    setPetted((p) => ({ ...p, [id]: Date.now() + PET_MS }));
+    setPetted((p) => ({ ...p, [id]: performance.now() }));
     timers.current[id] = setTimeout(() => {
       setPetted((p) => { const n = { ...p }; delete n[id]; return n; });
-    }, PET_MS);
+    }, petMs);
   }
 
   return (

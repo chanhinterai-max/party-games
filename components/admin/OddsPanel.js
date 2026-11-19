@@ -31,8 +31,8 @@ export default function OddsPanel() {
   async function save() {
     setMsg('');
     try {
-      const r = await api('/api/admin/chicken-odds', { method: 'PUT', body: odds });
-      setD({ ...d, odds: r.odds });
+      const r = await api('/api/admin/chicken-odds', { method: 'PUT', body: { ...odds, petSeconds: d.petSeconds } });
+      setD({ ...d, odds: r.odds, petSeconds: r.petSeconds });
       setMsg('Saved ✓');
     } catch (e) { setMsg(e.message); }
   }
@@ -49,6 +49,10 @@ export default function OddsPanel() {
         <select className="input" name="rule-animal" value={odds.rule.animal} onChange={(e) => set(['rule', 'animal'], e.target.value)}>
           {animals.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>)}
         </select>
+      </label>
+      <label className="field">Petted duration (seconds, {d.petRange[0]}-{d.petRange[1]}): hearts show this long, and the rule only applies inside this window
+        <input className="input" type="number" min={d.petRange[0]} max={d.petRange[1]} name="pet-seconds" value={d.petSeconds}
+          onChange={(e) => setD({ ...d, petSeconds: e.target.value === '' ? '' : Number(e.target.value) })} />
       </label>
       <div className="label">…use these odds instead</div>
       {table(odds.rule.odds, 'ruleodds')}
