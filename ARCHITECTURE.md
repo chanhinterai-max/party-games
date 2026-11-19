@@ -7,25 +7,24 @@ phone's browser, the API runs as Vercel Functions (Node.js), and all state lives
 ```mermaid
 flowchart LR
   subgraph Browser["📱 Phone / browser"]
-    P["Player screen<br/>/play/truth-or-dare<br/>(room code + host token in localStorage)"]
-    A["Advanced player<br/>/room/[code] live view + drag-and-drop queue editor"]
-    D["Admin dashboard<br/>/admin"]
+    P["Player screen /play/truth-or-dare<br/>names + gender, room code, Chicken out 🐔,<br/>running animals (petted list sent with chicken-out)"]
+    A["Advanced player /room/[code]<br/>live view, drag-and-drop queue editor,<br/>quick categories, global drinks editor"]
+    D["Admin /admin<br/>account, users, question bank,<br/>chicken odds + hidden rule, games, rooms, audit"]
   end
-  subgraph Vercel["▲ Vercel (Next.js on Fluid Compute)"]
-    R1["/api/rooms/*<br/>create room, draw / done / sip / level"]
-    R2["/api/rooms/[code]/queue<br/>read + edit queue (advanced/admin)"]
-    R3["/api/auth/*<br/>login / logout / me"]
-    R4["/api/admin/*<br/>users, games, rooms, audit (admin)"]
-    R5["/api/setup<br/>one-time first admin"]
-    L["lib/: auth.js · game.js · content.js · db.js"]
+  subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
+    R1["/api/rooms/*<br/>create, draw / done / chicken / level"]
+    R2["/api/rooms/[code]/queue<br/>/api/me/categories · /api/drinks"]
+    R3["/api/auth/* · /api/setup"]
+    R4["/api/admin/*<br/>account, users, bank, chicken-odds, games, rooms, audit"]
+    L["lib/: game · bank · settings · categories · auth · db"]
   end
-  DB[("🐘 Postgres (Neon)<br/>users · sessions · rooms · games<br/>audit_log · login_throttle")]
-  P -- "fetch JSON + x-room-token" --> R1
-  A -- "session cookie (httpOnly)" --> R2
-  D -- "session cookie (httpOnly)" --> R4
+  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what · bank_where<br/>user_categories · settings (drinks, odds)")]
+  P -- "JSON + x-room-token" --> R1
+  A -- "httpOnly session cookie" --> R2
+  D -- "httpOnly session cookie" --> R4
   P & A & D --> R3
-  R1 & R2 & R3 & R4 & R5 --> L
-  L -- "pg, parameterized SQL over TLS<br/>DATABASE_URL (Vercel env var)" --> DB
+  R1 & R2 & R3 & R4 --> L
+  L -- "parameterized SQL over TLS (DATABASE_URL)" --> DB
 ```
 
 ## Directory tree
@@ -35,40 +34,59 @@ party-games/
 ├── app/                              ── UI pages (browser) + API routes (server)
 │   ├── layout.js                     Site shell; Login button top-right (components/AuthButton.js)
 │   ├── page.js                       Home: game tiles, hides games disabled by the admin
-│   ├── globals.css                   Neon/dark mobile-first styles
-│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names, level, room code, Truth/Dare, Next, drink
+│   ├── globals.css                   Neon/dark mobile-first styles (+ gender dots, chicken modal, animals)
+│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names + Male/Female, level, room code, Truth/Dare,
+│   │                                 Next, Chicken out 🐔 reveal, running animals
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
 │   ├── room/page.js                  Enter a room code
 │   ├── room/[code]/page.js           ADVANCED: live view + queue editor (components/QueueEditor.js)
-│   ├── admin/page.js                 ADMIN PAGE: users, enable/disable games, live rooms, audit log
+│   ├── admin/page.js                 ADMIN PAGE: my account, users (create/enable/reset/delete), question
+│   │                                 bank, chicken odds + hidden rule, drinks, games, live rooms, audit
 │   └── api/
 │       ├── games/route.js            GET enabled games (public)
-│       ├── rooms/route.js            POST create room → code + host token (public, rate limited)
-│       ├── rooms/[code]/route.js     GET public room state (current player, card, history)
-│       ├── rooms/[code]/action/route.js  POST draw | done | sip | level (host token required)
+│       ├── rooms/route.js            POST create room (players with gender) → code + host token
+│       ├── rooms/[code]/route.js     GET public room state (no odds / rule ever exposed)
+│       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted[]} | level (host token)
 │       ├── rooms/[code]/queue/route.js   GET/PUT hidden question queues (advanced/admin)
+│       ├── me/categories/…           QUICK CATEGORIES: GET/POST, PATCH/DELETE [id] (own only)
+│       ├── drinks/route.js           DRINK OPTIONS: GET/PUT global chicken-out drinks (advanced/admin)
 │       ├── auth/login|logout|me/route.js  Session login/logout/current user
 │       ├── setup/route.js            One-time admin bootstrap (refuses once an admin exists)
 │       └── admin/
-│           ├── users/route.js        GET list / POST create advanced user (admin)
-│           ├── users/[id]/route.js   PATCH enable/disable (disable revokes sessions)
+│           ├── account/route.js      POST change own username and/or password (current password required)
+│           ├── users/route.js        GET list / POST create advanced user
+│           ├── users/[id]/route.js   PATCH enable/disable · DELETE advanced user (cascades sessions+categories)
 │           ├── users/[id]/password/route.js  POST reset password (revokes sessions)
+│           ├── bank/route.js         QUESTION BANK: GET all / POST add WHO|WHAT|WHERE
+│           ├── bank/[kind]/[id]/route.js  PATCH edit / DELETE bank entry
+│           ├── chicken-odds/route.js ANIMAL RULE: GET/PUT normal odds + hidden petted-animal rule
 │           ├── games/route.js        GET/PATCH home-page game toggles
 │           ├── rooms/route.js        GET live rooms (last 12h)
 │           └── audit/route.js        GET last 100 audit entries
 ├── components/
 │   ├── AuthButton.js                 Login / user menu (top-right)
-│   ├── QueueEditor.js                Drag-and-drop WHO/WHAT/WHERE editor (pointer events, touch-friendly)
+│   ├── QueueEditor.js                Drag-and-drop WHO/WHAT/WHERE editor + category filter
+│   ├── CategoryManager.js            Add/edit/delete own quick categories
+│   ├── DrinksEditor.js               Global chicken-out drink options
+│   ├── GenderDot.js                  Blue (male) / pink (female) solid circle next to names
+│   ├── RunningAnimals.js             CSS-animated baby animals; tap = petted 20 s (reduced-motion aware)
+│   ├── admin/AccountPanel.js         Change own username / password
+│   ├── admin/BankPanel.js            Manage WHO / WHAT / WHERE bank
+│   ├── admin/OddsPanel.js            Chicken odds + hidden rule settings
 │   └── api.js                        fetch helper
 ├── lib/                              ── server-side logic
-│   ├── content.js                    QUESTION BANK: levels (Children/Teen/Adult), WHO targets,
-│   │                                 WHERE body parts, WHAT templates (40 truths + 40 dares per level)
-│   ├── game.js                       ROOM/QUEUE LOGIC: room codes, queue generation, turn rotation,
-│   │                                 draw/done/sip/level, queue edit validation, live rooms
-│   ├── auth.js                       SESSION/AUTH LOGIC: Argon2id hashing, login + lockout,
-│   │                                 IP throttling, session tokens (SHA-256 in DB), roles, audit log
-│   ├── db.js                         DATABASE SCHEMA (auto-created) + pg pool + transactions
+│   ├── content.js                    SEED for the question bank (levels, WHO, WHERE incl. thigh, WHAT
+│   │                                 templates), private-part blocklist, animals, default drinks/odds,
+│   │                                 default "Flirty default" category
+│   ├── bank.js                       QUESTION BANK (DB): load + validated CRUD for bank_who/what/where
+│   ├── settings.js                   DRINK OPTIONS + ANIMAL RULE (settings table) + server-side drink pick
+│   ├── categories.js                 QUICK CATEGORIES (user_categories table), per-user seeding
+│   ├── game.js                       ROOM/QUEUE LOGIC: codes, genders, queue generation from DB bank,
+│   │                                 turn rotation, draw/done/chicken/level, queue edit validation
+│   ├── auth.js                       SESSION/AUTH LOGIC: Argon2id, login + lockout, IP throttling,
+│   │                                 session tokens (SHA-256 in DB), roles, audit log
+│   ├── db.js                         DATABASE SCHEMA + idempotent migrations + first-run bank seeding
 │   ├── games.js                      Home-page game slots registry (add new games here)
 │   └── http.js                       JSON responses, Origin (CSRF) check, input validation, errors
 ├── next.config.mjs                   Security headers (HSTS, nosniff, frame deny, …)
@@ -81,7 +99,11 @@ party-games/
 
 | Thing | Location |
 |---|---|
-| Questions (WHAT templates, WHO targets, WHERE parts) | `lib/content.js` |
+| Question bank (live) | Postgres `bank_who`, `bank_what`, `bank_where` (edited on /admin; seeded once from `lib/content.js`) |
+| Quick categories | `user_categories` table (one row per category, per user; `who_rule`, `what_ids`, `where_list`) |
+| Chicken-out drink options | `settings` row `drinks` (global; edited by advanced players and admins) |
+| Chicken odds + hidden animal rule | `settings` row `odds` (admin only; outcome picked server-side in `lib/settings.js`) |
+| Player genders | `rooms.genders` JSONB (name → male/female) |
 | Account + password schema | `users` table in `lib/db.js` (`password_hash` = Argon2id) |
 | **Passwords** | Only as Argon2id hashes in the Postgres `users` table. There is no password file in the repo. |
 | Sessions | `sessions` table: SHA-256 of a random 256-bit token; the raw token is only in an httpOnly cookie `pg_session` (Secure, SameSite=Lax, 12h) |
@@ -108,7 +130,10 @@ party-games/
 3. **Advanced player / admin** logs in → opens `/room/[code]` → sees the live turn, card and history (polled every
    3 s) and drags WHO/WHAT/WHERE chips or whole questions; every change is saved with `PUT /api/rooms/[code]/queue`
    (validated server-side, audit-logged).
-4. **Admin** manages advanced users, toggles home-page games and sees live rooms at `/admin`.
+4. **Chicken out 🐔**: the player screen sends `{action:'chicken', petted:[animal ids]}`; the server picks the drink
+   category with the configured odds (switching to the rule odds if the rule's target animal is petted) and a random
+   option text. Only the result comes back; odds and the rule are never sent to players.
+5. **Admin** manages own account, advanced users, the question bank, odds/rule, games and live rooms at `/admin`.
 
 ## Security summary
 
@@ -118,4 +143,5 @@ party-games/
 - CSRF: SameSite=Lax cookies + strict `Origin` check on every POST/PUT/PATCH.
 - Role checks on every protected API route on the server; disabling a user or resetting a password deletes their sessions.
 - Parameterized SQL only; all inputs validated (names, levels, queue items, WHERE limited to an allow-list).
+- Admin account changes (username/password) require the current password; a password change signs out other sessions.
 - First admin only via `ADMIN_SETUP_SECRET`, and only while no admin exists.

@@ -2,6 +2,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/components/api';
+import AccountPanel from '@/components/admin/AccountPanel';
+import BankPanel from '@/components/admin/BankPanel';
+import OddsPanel from '@/components/admin/OddsPanel';
+import DrinksEditor from '@/components/DrinksEditor';
 
 export default function Admin() {
   const [me, setMe] = useState(undefined);
@@ -51,6 +55,10 @@ export default function Admin() {
     const d = await api(`/api/admin/users/${u.id}/password`, { method: 'POST', body: {} });
     setReveal({ username: u.username, password: d.password });
   });
+  const deleteUser = (u) => run(async () => {
+    if (!confirm(`Permanently delete ${u.username}? Their sessions and categories are removed. This cannot be undone.`)) return;
+    await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+  });
   const toggleGame = (g) => run(() => api('/api/admin/games', { method: 'PATCH', body: { id: g.id, enabled: !g.enabled } }));
 
   return (
@@ -65,6 +73,8 @@ export default function Admin() {
           <button className="small-btn good" type="submit" style={{ flex: '0 0 auto', minHeight: 50 }}>Open</button>
         </form>
       </section>
+
+      <AccountPanel me={me} onChanged={(u) => { setMe(u); refresh(); }} />
 
       <section className="panel" data-section="users">
         <h3>Advanced users</h3>
@@ -84,6 +94,7 @@ export default function Admin() {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {u.id !== me.id && <button className={`small-btn ${u.enabled ? 'danger' : 'good'}`} data-act="toggle-user" onClick={() => toggleUser(u)}>{u.enabled ? 'Disable' : 'Enable'}</button>}{' '}
                   <button className="small-btn" data-act="reset-pw" onClick={() => resetPw(u)}>Reset pw</button>
+                  {u.role === 'advanced' && <>{' '}<button className="small-btn danger" data-act="delete-user" onClick={() => deleteUser(u)}>Delete</button></>}
                 </td>
               </tr>
             ))}
@@ -106,6 +117,10 @@ export default function Admin() {
           </div>
         ))}
       </section>
+
+      <BankPanel />
+      <OddsPanel />
+      <section className="panel"><DrinksEditor /></section>
 
       <section className="panel" data-section="rooms">
         <h3>Live rooms (last 12h) <button className="small-btn" onClick={refresh}>↻</button></h3>

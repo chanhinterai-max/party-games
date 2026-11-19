@@ -15,3 +15,14 @@ export const PATCH = route(async (req, { params }) => {
   await audit(admin, body.enabled ? 'user_enable' : 'user_disable', r.rows[0].username, null, req);
   return json({ user: publicUser(r.rows[0]) });
 }, { mutation: true });
+
+export const DELETE = route(async (req, { params }) => {
+  const admin = await requireRole(req, ['admin']);
+  const { id } = await params;
+  if (!/^\d{1,18}$/.test(id)) throw new HttpError(400, 'Invalid id');
+  const r = await q("DELETE FROM users WHERE id=$1 AND role='advanced' RETURNING username", [id]);
+  if (!r.rows.length) throw new HttpError(404, 'Advanced user not found (admins cannot be deleted)');
+  // sessions and categories are removed by ON DELETE CASCADE
+  await audit(admin, 'user_delete', r.rows[0].username, null, req);
+  return json({ ok: true });
+}, { mutation: true });

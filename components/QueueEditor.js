@@ -2,7 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from './api';
-import { LEVELS } from '@/lib/content';
+import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
+import GenderDot, { WithDot } from './GenderDot';
+import CategoryManager from './CategoryManager';
+import DrinksEditor from './DrinksEditor';
 
 const hexId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('');
 const shortWhat = (t) => t.replaceAll('{who}', 'WHO').replaceAll('{where}', 'WHERE');
@@ -14,6 +17,8 @@ export default function QueueEditor({ code }) {
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [drag, setDrag] = useState(null); // { x, y, label, cls }
+  const [cats, setCats] = useState([]);
+  const [catId, setCatId] = useState('');
   const [hover, setHover] = useState(null); // { key, pos }
   const pending = useRef(0);
   const dragging = useRef(false);
@@ -33,6 +38,9 @@ export default function QueueEditor({ code }) {
       setError(e.status === 401 ? 'login' : e.message);
     }
   }, [code]);
+
+  const loadCats = useCallback(() => api('/api/me/categories').then((d) => setCats(d.categories)).catch(() => {}), []);
+  useEffect(() => { loadCats(); }, [loadCats]);
 
   useEffect(() => {
     load(true);
@@ -67,6 +75,19 @@ export default function QueueEditor({ code }) {
   if (!view || !queues) return <p className="count" style={{ marginTop: 30 }}>Loading room {code}…</p>;
 
   const { room, palette } = view;
+  const genders = room.genders || {};
+  const cat = tab === 'dare' ? cats.find((c) => c.id === catId) : null;
+  const whoAllowed = (w) => {
+    if (!cat) return true;
+    const m = cat.who?.mode;
+    if (m === 'all') return true;
+    if (m === 'female' || m === 'male') return w.kind === 'player' && w.gender === m;
+    if (m === 'custom') return (cat.who.values || []).some((v) => (v.kind === 'gender' ? w.kind === 'player' && w.gender === v.value : v.kind === w.kind && v.value === w.value));
+    return true;
+  };
+  const pWho = palette.who.filter(whoAllowed);
+  const pWhat = cat ? palette.what[tab].filter((w) => cat.what.includes(w.id)) : palette.what[tab];
+  const pWhere = cat ? palette.where.filter((w) => cat.where.includes(w)) : palette.where;
   const list = queues[tab];
   const whoLabel = (w) => palette.who.find((p) => p.kind === w.kind && p.value === w.value)?.label || w.value;
   const whatInfo = (id) => palette.what[tab].find((w) => w.id === id);
@@ -158,7 +179,7 @@ export default function QueueEditor({ code }) {
   const chip = (field, value, label, from = null, extra = '') => (
     <span className={`chip ${field} ${extra}`} data-chip={field}
       onPointerDown={(e) => startDrag(e, { kind: 'field', field, value, from }, label, `chip ${field}`)}>
-      {label}
+      {field === 'who' && value?.kind === 'player' && <GenderDot gender={genders[value.value]} />}{label}
     </span>
   );
 
@@ -194,13 +215,14 @@ export default function QueueEditor({ code }) {
 
       <div className="live-card section" data-live>
         <div className="label">Live · turn {room.turn}</div>
-        <div><strong data-live-current>{room.current}</strong>’s turn</div>
-        {room.card ? <p data-live-card style={{ margin: '8px 0 0' }}>{room.card.type === 'truth' ? '🤫' : '🔥'} {room.card.text}</p> : <p className="count" style={{ margin: '8px 0 0' }}>Choosing Truth or Dare…</p>}
+        <div><strong data-live-current><GenderDot gender={genders[room.current]} />{room.current}</strong>’s turn</div>
+        {room.card ? <p data-live-card style={{ margin: '8px 0 0' }}>{room.card.type === 'truth' ? '🤫' : '🔥'} <WithDot text={room.card.text} name={room.card.whoRef?.kind === 'player' ? room.card.who : null} gender={genders[room.card.who]} /></p> : <p className="count" style={{ margin: '8px 0 0' }}>Choosing Truth or Dare…</p>}
+        {room.lastChicken && <p className="count" data-live-chicken style={{ margin: '6px 0 0' }}>🐔 {room.lastChicken.player} chickened out: {DRINK_CATEGORIES.find((c) => c.id === room.lastChicken.category)?.name} · {room.lastChicken.text}</p>}
         <details style={{ marginTop: 10 }}>
           <summary className="count">History ({room.history.length})</summary>
           <ul className="history" style={{ marginTop: 8 }}>
             {room.history.map((h, i) => (
-              <li key={i}><div className="meta">#{h.turn} · {h.player} · {h.result === 'drank' ? '🍻 drank' : '✓ done'}</div>{h.text || '(passed)'}</li>
+              <li key={i}><div className="meta">#{h.turn} · <GenderDot gender={genders[h.player]} />{h.player} · {h.result === 'chicken' ? `🐔 chickened out → ${h.drink?.text || ''}` : h.result === 'drank' ? '🍻 drank' : '✓ done'}</div>{h.text || '(passed)'}</li>
             ))}
           </ul>
         </details>
@@ -215,20 +237,30 @@ export default function QueueEditor({ code }) {
       </div>
 
       <div className="palette">
-        <details open><summary>WHO · drag onto a question</summary>
-          <div className="chips">{palette.who.map((w) => <span key={w.kind + w.value}>{chip('who', { kind: w.kind, value: w.value }, w.label)}</span>)}</div>
+        {tab === 'dare' && (
+          <div className="cat-bar">
+            <select value={catId} onChange={(e) => setCatId(e.target.value)} aria-label="Quick category" data-cat-select>
+              <option value="">All chips (no category)</option>
+              {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+        <details open><summary>WHO · drag onto a question{cat ? ` (${pWho.length})` : ''}</summary>
+          <div className="chips" data-palette="who">{pWho.length === 0 && <span className="count">No matching players in this room.</span>}{pWho.map((w) => <span key={w.kind + w.value}>{chip('who', { kind: w.kind, value: w.value }, w.label)}</span>)}</div>
         </details>
-        <details><summary>WHAT · {tab} bank ({palette.what[tab].length})</summary>
-          <div className="chips">{palette.what[tab].map((w) => <span key={w.id}>{chip('what', { id: w.id, text: w.text }, shortWhat(w.text))}</span>)}</div>
+        <details open={!!cat}><summary>WHAT · {tab} bank ({pWhat.length})</summary>
+          <div className="chips" data-palette="what">{pWhat.map((w) => <span key={w.id}>{chip('what', { id: w.id, text: w.text }, shortWhat(w.text))}</span>)}</div>
         </details>
         {tab === 'dare' && room.level === 'adult' && (
-          <details><summary>WHERE · touch dares</summary>
-            <div className="chips">{palette.where.map((w) => <span key={w}>{chip('where', w, w)}</span>)}</div>
+          <details open={!!cat}><summary>WHERE · touch dares ({pWhere.length})</summary>
+            <div className="chips" data-palette="where">{pWhere.map((w) => <span key={w}>{chip('where', w, w)}</span>)}</div>
           </details>
         )}
         <div className="status" aria-live="polite">{status}</div>
       </div>
 
+      {tab === 'dare' && <CategoryManager cats={cats} reload={loadCats} palette={palette} level={room.level} />}
+      <DrinksEditor />
       <div className="row section"><button className="btn btn-ghost" onClick={addRandom} data-act="add-q">＋ Add question at top</button></div>
       <div className="qlist" data-queue={tab}>
         {list.map((it, idx) => {

@@ -1,11 +1,13 @@
 import { route, json, readJson } from '@/lib/http';
 import { requireRole, audit } from '@/lib/auth';
 import { getRoom, editorView, saveQueues } from '@/lib/game';
+import { loadBank } from '@/lib/bank';
 
 export const GET = route(async (req, { params }) => {
   await requireRole(req, ['admin', 'advanced']);
   const { code } = await params;
-  return json(editorView(await getRoom(code)));
+  const [room, bank] = await Promise.all([getRoom(code), loadBank()]);
+  return json(editorView(room, bank));
 });
 
 export const PUT = route(async (req, { params }) => {
