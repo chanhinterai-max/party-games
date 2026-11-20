@@ -55,7 +55,8 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
   const boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null), freezeRef = useRef(null), bannerRef = useRef(null);
   const btnRefs = useRef([]);
   const [lay, setLay] = useState(null);
-  const [stage, setStage] = useState('ready'); // ready | countdown(race) | finish
+  const [stage, setStage] = useState('ready');
+  const [remap, setRemap] = useState(false); // v10: a new map for a new visible size is being built (▶ waits) // ready | countdown(race) | finish
   const cfgRef = useRef(null); if (!cfgRef.current) cfgRef.current = modeCfg(mode, applyTunables(RACE, tune)); // v10: admin overrides
 
   // 1) lock the page, get the (usually already built) map for this heat
@@ -86,7 +87,8 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
       tm = setTimeout(() => {
         const l = layRef.current; if (!l || stageRef.current !== 'ready') return;
         const { w, h } = boardSize(); if (Math.abs(w - l.w) < 4 && Math.abs(h - l.h) < 4) return;
-        requestLayout(`${slot}|vv`, w, h, racers.length, cfgRef.current.mode).then((nl) => { if (live && stageRef.current === 'ready') setLay(nl); });
+        setRemap(true);
+        requestLayout(`${slot}|vv`, w, h, racers.length, cfgRef.current.mode).then((nl) => { if (live && stageRef.current === 'ready') setLay(nl); }).finally(() => { if (live) setRemap(false); });
       }, 150);
     };
     vv?.addEventListener('resize', onResize); window.addEventListener('resize', onResize); window.addEventListener('orientationchange', onResize);
@@ -342,7 +344,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
             {stage === 'ready' && (
               <>
                 <div className="race-label">{label}{mode === 'adult' ? ' · 🌙⛈️' : ''}</div>
-                <button type="button" className="race-go" data-act="race-go" onClick={() => setStage('countdown')}>▶</button>
+                <button type="button" className="race-go" data-act="race-go" disabled={remap} aria-busy={remap} onClick={() => setStage('countdown')}>{remap ? '…' : '▶'}</button>
               </>
             )}
             <div className="race-cd" data-show="0" ref={cdRef} />
