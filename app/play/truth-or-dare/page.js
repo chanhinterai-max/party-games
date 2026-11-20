@@ -367,7 +367,7 @@ export default function TruthOrDare() {
                 <div className="text card-in" data-card-text key={card.itemId}>
                   <WithDot text={card.text} name={card.whoIsPlayer || card.whoRef?.kind === 'player' ? card.who : null} gender={g[card.who]} />
                 </div>
-                {card.seconds ? <Timer key={card.itemId} seconds={card.seconds} /> : null}
+                {card.seconds ? <Timer key={`timer-${card.itemId}`} seconds={card.seconds} /> : null}
               </>
             ) : (
               <SurpriseBody key={sp.id} sp={sp} players={room.players} />
