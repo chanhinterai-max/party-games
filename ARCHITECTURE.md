@@ -9,21 +9,24 @@ flowchart LR
   subgraph Browser["📱 Phone / browser"]
     P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔, running party animals, confetti results"]
     A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool"]
+    RC["🏁 Animal Race /play/animal-race<br/>setup + Meet the animals (shared), heats + final,<br/>RaceBoard: rAF + CSS transforms, multi-touch, wild animals,<br/>ALL race logic on the phone (lib/race/*), podium + drink callout, champion"]
     D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>chicken odds + pet-rule target, surprise share, games, rooms, audit"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
     R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end · idle close · results"]
     R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises"]
     R3["/api/auth/* · /api/setup"]
+    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals,<br/>wild emojis — no room, no DB writes"]
     R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, games, rooms, audit"]
-    L["lib/: game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
+    L["lib/: animals (shared roles) · race/* (config, heats, geometry, engine — also bundled to the phone) ·<br/>game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
   end
   DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_pool (predator/prey) · human_items<br/>user_categories · settings (drinks, odds, pet, surprise, seed_v5, seed_v6)")]
   P -- "JSON + x-room-token" --> R1
   A -- "httpOnly session cookie" --> R2
   D -- "httpOnly session cookie" --> R4
+  RC -- "1 call before the race, none during it" --> R5
   P & A & D --> R3
-  R1 & R2 & R3 & R4 --> L
+  R1 & R2 & R3 & R4 & R5 --> L
   L -- "parameterized SQL over TLS (DATABASE_URL)" --> DB
 ```
 
@@ -42,6 +45,8 @@ party-games/
 │   │                                 single draw request is in flight), timers, Chicken out 🐔, running animals =
 │   │                                 the players' own animals (Human = 🏃), "🧍 Human card" label,
 │   │                                 End game, results + confetti
+│   ├── play/animal-race/page.js      🏁 ANIMAL RACE: setup (shared PlayerRows) → Meet the animals (shared
+│   │                                 AnimalList + heat plan chips) → heats → final → champion; remembers players
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
 │   ├── room/page.js                  Enter a room code
@@ -50,6 +55,8 @@ party-games/
 │   │                                 bank, chicken odds + hidden rule, drinks, games, live rooms, audit
 │   └── api/
 │       ├── games/route.js            GET enabled games (public)
+│       ├── race/start/route.js       ANIMAL RACE START (POST, stateless): game enabled? players valid? → animals
+│       │                             (1:1 predator/prey + Human) + wild emojis from unused pool animals
 │       ├── rooms/route.js            POST create room (players with gender) → code + host token + public animals
 │       ├── rooms/[code]/route.js     GET public room state (no odds / rule ever exposed)
 │       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted:[{id,elapsedMs}]} | surprise_done | level | end
@@ -89,6 +96,14 @@ party-games/
 │   ├── SurpriseEditor.js             Surprise cards (type/level/text/on-off/timer), 🧍 Human tab (surprise/truth/
 │   │                                 dare) + predator/prey animal pool
 │   │                                 (advanced room view + admin page; loads only when opened)
+│   ├── party/store.js                SHARED setup: remembered players (localStorage key shared by both games),
+│   │                                 min/max, blank row, checkPlayers
+│   ├── party/PlayerRows.js           SHARED name + Male/Female rows + add/remove (Truth or Dare + Animal Race)
+│   ├── party/AnimalList.js           SHARED "Meet the animals" list (name, gender dot, emoji, Predator/Prey/Human)
+│   ├── race/RaceBoard.js             RACE BOARD: fullscreen lanes from the corners to the 🏁 goal, rotated tap
+│   │                                 buttons (native pointerdown, 4 touches), countdown, one rAF loop that writes
+│   │                                 transforms only; bush 🌳 / Zzz 💤 / crouch 🧎, wild ❓ → ‼️, penalty badges
+│   ├── race/RaceResults.js           Heat/final podium (medals, distance bars) + 🍺 Drink! callout for last place
 │   ├── play/Timer.js                 Countdown (Start/Pause + Reset), runs only on the phone
 │   ├── play/Confetti.js              Hand-rolled CSS confetti (36 spans, after first paint, reduced-motion off)
 │   ├── play/SurpriseBody.js          Surprise face: Animal Match (predator + prey, with player names), Human,
@@ -127,7 +142,17 @@ party-games/
 │   │                                 session tokens (SHA-256 in DB), roles, audit log
 │   ├── db.js                         DATABASE SCHEMA + idempotent additive migrations + first-run seeding +
 │   │                                 one-time `seed_v5` / `seed_v6` (inserts only missing rows; never wipes edits)
-│   ├── games.js                      Home-page game slots registry (add new games here)
+│   ├── animals.js                    SHARED ANIMAL ROLES: shuffle, 1:1 predator/prey + 🧍 Human on odd counts,
+│   │                                 public animal view (used by game.js and the race start API)
+│   ├── race/config.js                🏁 RACE TUNABLES (one file): steps to goal, idle-hide ms, tap cap, disruptions
+│   │                                 per race + timing, ❓/approach/sprint ms, penalty action/rest/return ms,
+│   │                                 sizes (candidates for future admin settings)
+│   ├── race/heats.js                 Heat sizes (≤4, balanced) + predator/prey mixing; final when >1 heat
+│   ├── race/geometry.js              Lanes from corners (equal length), safe wild strips beside each lane that
+│   │                                 clear every lane, the goal, buttons and screen edge
+│   ├── race/engine.js                Pure race state machine: taps, idle hide, wild phases, catches, equal
+│   │                                 penalties, ranking + drinkers (client-side; unit-tested in node)
+│   ├── games.js                      Home-page game slots registry (add new games here; Animal Race = slot 2)
 │   └── http.js                       JSON responses, Origin (CSRF) check, input validation, errors
 ├── next.config.mjs                   Security headers (HSTS, nosniff, frame deny, …)
 ├── .env.example                      Names of required env vars (no real values)
@@ -159,7 +184,10 @@ party-games/
 | **Passwords** | Only as Argon2id hashes in the Postgres `users` table. There is no password file in the repo. |
 | Sessions | `sessions` table: SHA-256 of a random 256-bit token; the raw token is only in an httpOnly cookie `pg_session` (Secure, SameSite=Lax, 12h) |
 | Rooms, queues, history | `rooms` table (`truth_queue`, `dare_queue`, `history`, `state` as JSONB) |
-| Game on/off switches | `games` table (missing row = enabled) |
+| Game on/off switches | `games` table (missing row = enabled); `animal-race` uses the same switch |
+| **Animal Race rules + timing (v7)** | `lib/race/config.js` (`RACE`): stepsToGoal 45, stopMs 350, maxTapsPerSec 14, disruptions 3, lurk/❓/approach/sprint ms, penalty 900 + 1000 + 700 = 2600 ms for every outcome. Code constants (no admin UI yet) |
+| **Animal Race state** | Only in the phone's memory during a race (no room, no DB row, nothing sent to the server); players remembered in localStorage `partygames.tod.players.v3` (shared with Truth or Dare) |
+| Animal Race animals | Same `animal_pool` table; roles dealt by `lib/animals.js`; wild animals = pool animals not dealt to players |
 | Audit trail | `audit_log` table (who, action, target, IP, time) |
 | Login rate limiting | `login_throttle` table (per IP) + `users.failed_attempts` / `locked_until` (5 fails → 15 min lock) |
 
@@ -209,6 +237,15 @@ party-games/
    running-animal ids through the room's animal roles (any-prey / any-predator / human / a specific animal).
 12. **Heat (v5)**: new queues are sorted by WHAT heat (+ WHERE heat) with random jitter (initial order only); the heat
    meter shows turns played / total.
+
+13. **Animal Race (v7)**: setup → `POST /api/race/start` (stateless; 403 when the admin disabled the game) →
+   Meet the animals → heats of ≤4 (balanced, predators and prey mixed) → a final for heat winners when there is more
+   than one heat. During a race everything runs on the phone: a tap moves the animal one step; with no tap for
+   350 ms prey hide in a bush, predators sleep and the Human crouches. Every lane gets the same number of wild
+   animals at shared times (+ small per-lane jitter); they live in a strip beside the lane that never crosses any
+   lane. If the racer moves: ❓ → slow approach → sprint → contact; stopping first makes the wild animal leave.
+   On contact the racer goes back to the start after the same penalty (eaten / feast + rest / caught / distracted
+   all = 2600 ms). First to the goal wins; the rest rank by distance; last place (ties too) drinks.
 
 ## Security summary
 

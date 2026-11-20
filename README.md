@@ -7,7 +7,8 @@ Next.js on Vercel with Postgres (Neon). See [ARCHITECTURE.md](./ARCHITECTURE.md)
 | Game | Status |
 | --- | --- |
 | Truth or Dare (Children / Teen / Adult) | ✅ Playable |
-| 5 slots | 🔒 Coming soon |
+| 🏁 Animal Race (tap race, heats + final) | ✅ Playable |
+| 4 slots | 🔒 Coming soon |
 
 ## Roles
 - **Anyone**: pick a game, enter names, play. Each game gets a room code.

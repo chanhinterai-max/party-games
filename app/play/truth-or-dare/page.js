@@ -9,35 +9,13 @@ import Results from '@/components/Results';
 import Timer from '@/components/play/Timer';
 import Confetti from '@/components/play/Confetti';
 import SurpriseBody from '@/components/play/SurpriseBody';
+import AnimalList from '@/components/party/AnimalList';
+import PlayerRows from '@/components/party/PlayerRows';
+import { STORE_PLAYERS, MIN, MAX, blank, load, save, loadPlayers } from '@/components/party/store';
 
-const STORE_PLAYERS = 'partygames.tod.players.v3';
 const STORE_LEVEL = 'partygames.tod.level';
 const STORE_ROOM = 'partygames.tod.room';
-const MIN = 2, MAX = 16;
-const blank = () => ({ name: '', gender: '' });
-
-const load = (k, f) => { try { return JSON.parse(localStorage.getItem(k)) ?? f; } catch { return f; } };
-const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const Shimmer = ({ w = '80%', h = 22 }) => <span className="shimmer" style={{ width: w, height: h }} aria-hidden="true" />;
-
-const ROLE_LABEL = { predator: '🦷 Predator', prey: '🌿 Prey', human: '🧍 Human', animal: '🐾 Animal' };
-// v6: everyone plays on one screen, so animals are shown openly (no private reveal).
-function AnimalList({ players, animals, genders }) {
-  return (
-    <ul className="animal-list">
-      {players.map((p) => {
-        const a = animals?.[p];
-        return (
-          <li key={p} className={`animal-row role-${a?.role || 'animal'}`} data-animal-row={p} data-role={a?.role || ''} data-animal-id={a?.id || ''}>
-            <span className="animal-emoji" aria-hidden="true">{a?.emoji || '🐾'}</span>
-            <span className="animal-who"><b><GenderDot gender={genders?.[p]} />{p}</b><small data-animal-name>{a?.name || 'Mystery'}</small></span>
-            <span className={`role-tag ${a?.role || ''}`}>{ROLE_LABEL[a?.role] || ROLE_LABEL.animal}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 export default function TruthOrDare() {
   const [players, setPlayers] = useState([blank(), blank()]);
@@ -60,12 +38,8 @@ export default function TruthOrDare() {
 
   useEffect(() => {
     api('/api/config').then((d) => d?.petSeconds && setPetMs(d.petSeconds * 1000)).catch(() => {});
-    let p = load(STORE_PLAYERS, null);
-    if (!Array.isArray(p)) {
-      const old = load('partygames.tod.players', []);
-      p = Array.isArray(old) ? old.filter((x) => typeof x === 'string').map((name) => ({ name, gender: '' })) : [];
-    }
-    if (p.length >= MIN) setPlayers(p.slice(0, MAX));
+    const p = loadPlayers();
+    if (p) setPlayers(p);
     const l = load(STORE_LEVEL, 'children');
     if (LEVELS.some((x) => x.id === l)) setLevel(l);
     setReduced(!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
@@ -83,7 +57,6 @@ export default function TruthOrDare() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 2600);
   }
-  const update = (i, patch) => setPlayers(players.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
   async function start() {
     setError('');
@@ -184,27 +157,7 @@ export default function TruthOrDare() {
             <div className="label" style={{ margin: 0 }}>Who’s playing?</div>
             <div className="count" style={{ textAlign: 'right' }}>{players.length} / {MAX}</div>
           </div>
-          <div className="players" style={{ marginTop: 10 }}>
-            {players.map((p, i) => (
-              <div className={`player-row ${missing.includes(i) ? 'missing' : ''}`} key={i}>
-                <input type="text" autoComplete="off" autoCapitalize="words" maxLength={20} placeholder={`Player ${i + 1}`}
-                  value={p.name} aria-label={`Player ${i + 1} name`} data-idx={i}
-                  onChange={(e) => update(i, { name: e.target.value })} />
-                <div className="gender-pick" role="group" aria-label={`Player ${i + 1} gender`}>
-                  <button type="button" className="male" aria-pressed={p.gender === 'male'} data-gender={`${i}-male`} onClick={() => update(i, { gender: 'male' })}>
-                    <GenderDot gender="male" />M</button>
-                  <button type="button" className="female" aria-pressed={p.gender === 'female'} data-gender={`${i}-female`} onClick={() => update(i, { gender: 'female' })}>
-                    <GenderDot gender="female" />F</button>
-                </div>
-                <button className="remove" aria-label={`Remove player ${i + 1}`} disabled={players.length <= MIN}
-                  style={players.length <= MIN ? { opacity: 0.35 } : undefined}
-                  onClick={() => setPlayers(players.filter((_, j) => j !== i))}>✕</button>
-              </div>
-            ))}
-          </div>
-          <div className="section">
-            <button className="btn btn-ghost" data-act="add" disabled={players.length >= MAX} onClick={() => setPlayers([...players, blank()])}>＋ Add player</button>
-          </div>
+          <PlayerRows players={players} setPlayers={setPlayers} missing={missing} />
         </div>
         <div className="section">
           <div className="label">Level</div>
