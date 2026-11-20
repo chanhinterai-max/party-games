@@ -6,6 +6,8 @@ import AccountPanel from '@/components/admin/AccountPanel';
 import BankPanel from '@/components/admin/BankPanel';
 import OddsPanel from '@/components/admin/OddsPanel';
 import DrinksEditor from '@/components/DrinksEditor';
+import SurpriseEditor from '@/components/SurpriseEditor';
+import SurpriseRatePanel from '@/components/admin/SurpriseRatePanel';
 
 export default function Admin() {
   const [me, setMe] = useState(undefined);
@@ -121,6 +123,8 @@ export default function Admin() {
       <BankPanel />
       <OddsPanel />
       <section className="panel"><DrinksEditor /></section>
+      <SurpriseRatePanel />
+      <SurpriseEditor />
 
       <section className="panel" data-section="rooms">
         <h3>Live rooms (active, played in the last hour) <button className="small-btn" onClick={refresh}>↻</button></h3>

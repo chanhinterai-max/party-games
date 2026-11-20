@@ -54,6 +54,14 @@ export default function Results({ room }) {
         {pairBlock('buddies', '🤜🤛', 'Best buddies')}
         {pairBlock('sisters', '👯‍♀️', 'Best sisters')}
       </div>
+      {r.animals && Object.keys(r.animals).length > 0 && (
+        <>
+          <div className="label" style={{ marginTop: 18 }}>🐾 Secret animals revealed</div>
+          <div className="scores" data-animals style={{ marginTop: 0 }}>
+            {room.players.map((p) => r.animals[p] && <span key={p} data-animal-for={p}><GenderDot gender={g[p]} />{p} · {r.animals[p].emoji} {r.animals[p].name}</span>)}
+          </div>
+        </>
+      )}
       <div className="label" style={{ marginTop: 18 }}>Everyone’s title</div>
       <ul className="titles">
         {room.players.map((p) => {

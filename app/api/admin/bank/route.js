@@ -1,11 +1,11 @@
 import { route, json, readJson } from '@/lib/http';
 import { requireRole, audit } from '@/lib/auth';
-import { loadBank, bankCreate } from '@/lib/bank';
+import { readBank, bankCreate } from '@/lib/bank';
 
 export const GET = route(async (req) => {
   await requireRole(req, ['admin']);
-  const b = await loadBank();
-  return json({ who: b.who, what: b.what, where: b.where });
+  const b = await readBank();
+  return json({ who: b.who, what: b.what, where: b.where, whereHeat: b.whereHeat });
 });
 
 export const POST = route(async (req) => {

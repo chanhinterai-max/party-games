@@ -6,10 +6,11 @@ import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
 import GenderDot, { WithDot } from './GenderDot';
 import CategoryManager from './CategoryManager';
 import DrinksEditor from './DrinksEditor';
+import SurpriseEditor from './SurpriseEditor';
 import Results from './Results';
 
 const hexId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('');
-const shortWhat = (t) => t.replaceAll('{who}', 'WHO').replaceAll('{where}', 'WHERE');
+const shortWhat = (t) => t.replaceAll('{who}', 'WHO').replaceAll('{where}', 'WHERE').replaceAll('{partner}', 'PARTNER');
 
 export default function QueueEditor({ code }) {
   const [view, setView] = useState(null);
@@ -239,7 +240,7 @@ export default function QueueEditor({ code }) {
           <summary className="count">History ({room.history.length})</summary>
           <ul className="history" style={{ marginTop: 8 }}>
             {room.history.map((h, i) => (
-              <li key={i}><div className="meta">#{h.turn} · <GenderDot gender={genders[h.player]} />{h.player} · {h.result === 'chicken' ? `🐔 chickened out → ${h.drink?.text || ''}` : h.result === 'drank' ? '🍻 drank' : '✓ done'}</div>{h.text || '(passed)'}</li>
+              <li key={i}><div className="meta">#{h.turn} · {h.result === 'surprise' ? `✨ Surprise · ${h.stype}` : <><GenderDot gender={genders[h.player]} />{h.player}</>} · {h.result === 'surprise' ? '' : h.result === 'chicken' ? `🐔 chickened out → ${h.drink?.text || ''}` : h.result === 'drank' ? '🍻 drank' : '✓ done'}</div>{h.text || '(passed)'}</li>
             ))}
           </ul>
         </details>
@@ -278,6 +279,7 @@ export default function QueueEditor({ code }) {
 
       {tab === 'dare' && <CategoryManager cats={cats} reload={loadCats} palette={palette} level={room.level} />}
       <DrinksEditor />
+      <SurpriseEditor />
       <div className="row section"><button className="btn btn-ghost" onClick={addRandom} data-act="add-q">＋ Add question at top</button></div>
       <div className="qlist" data-queue={tab}>
         {list.map((it, idx) => {

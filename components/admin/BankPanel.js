@@ -4,6 +4,17 @@ import { api } from '../api';
 import { LEVELS } from '@/lib/content';
 
 // Admin: manage the default WHO / WHAT / WHERE question bank (DB tables).
+// v5: heat 1-3 (new queues go mild -> hot) and an optional countdown (seconds) per WHAT; heat per WHERE.
+const FLAMES = { 1: '🔥', 2: '🔥🔥', 3: '🔥🔥🔥' };
+const HeatSelect = ({ value, onChange, name }) => (
+  <select className="input heat-select" name={name} value={value ?? 2} onChange={(e) => onChange(Number(e.target.value))} aria-label="Heat">
+    <option value={1}>🔥 mild</option><option value={2}>🔥🔥 warm</option><option value={3}>🔥🔥🔥 hot</option>
+  </select>
+);
+const SecondsInput = ({ value, onChange, name }) => (
+  <input className="input secs-input" type="number" min={3} max={300} name={name} placeholder="⏱ sec" aria-label="Timer seconds (optional)"
+    value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
+);
 export default function BankPanel() {
   const [bank, setBank] = useState(null);
   const [tab, setTab] = useState('what');
@@ -29,7 +40,7 @@ export default function BankPanel() {
   return (
     <section className="panel" data-section="bank">
       <h3>Question bank (default WHO / WHAT / WHERE)</h3>
-      <p className="count">New rooms use this bank. WHAT uses <code>{'{who}'}</code> and (Adult dares only) <code>{'{where}'}</code>.</p>
+      <p className="count">New rooms use this bank. WHAT uses <code>{'{who}'}</code>, <code>{'{partner}'}</code> (player picks a partner) and (Adult dares only) <code>{'{where}'}</code>. Heat orders new queues mild → hot; ⏱ adds a countdown timer.</p>
       <div className="tabs">
         {['who', 'what', 'where'].map((k) => <button key={k} aria-pressed={tab === k} data-bank-tab={k} onClick={() => { setTab(k); setEdit(null); }}>{k.toUpperCase()}</button>)}
       </div>
@@ -83,14 +94,18 @@ export default function BankPanel() {
                 {edit?.key === w.id ? (
                   <>
                     <textarea className="input" style={{ width: '100%' }} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} />
-                    <button className="small-btn good" onClick={() => save('what', w.id, { text: edit.text })}>Save</button>{' '}
+                    <div className="row">
+                      <HeatSelect name="edit-heat" value={edit.heat} onChange={(v) => setEdit({ ...edit, heat: v })} />
+                      <SecondsInput name="edit-seconds" value={edit.seconds} onChange={(v) => setEdit({ ...edit, seconds: v })} />
+                    </div>
+                    <button className="small-btn good" data-act="save-what" onClick={() => save('what', w.id, { text: edit.text, heat: edit.heat, seconds: edit.seconds })}>Save</button>{' '}
                     <button className="small-btn" onClick={() => setEdit(null)}>Cancel</button>
                   </>
                 ) : (
                   <div className="row" style={{ alignItems: 'center' }}>
-                    <span>{w.text}</span>
+                    <span>{w.text} <span className="count" data-heat={w.heat} data-seconds={w.seconds ?? ''}>{FLAMES[w.heat] || ''}{w.seconds ? ` · ⏱${w.seconds}s` : ''}</span></span>
                     <span style={{ whiteSpace: 'nowrap' }}>
-                      <button className="small-btn" onClick={() => setEdit({ key: w.id, text: w.text })}>Edit</button>{' '}
+                      <button className="small-btn" data-act="edit-what" onClick={() => setEdit({ key: w.id, text: w.text, heat: w.heat, seconds: w.seconds })}>Edit</button>{' '}
                       <button className="small-btn danger" onClick={() => del('what', w.id, w.text)}>✕</button>
                     </span>
                   </div>
@@ -100,7 +115,11 @@ export default function BankPanel() {
           </ul>
           <textarea className="input" style={{ width: '100%', marginTop: 8 }} name="what-text" placeholder={type === 'dare' ? 'e.g. Give {who} a high-five' : 'e.g. What would {who} never guess about you?'}
             value={add.text || ''} onChange={(e) => setAdd({ ...add, text: e.target.value })} />
-          <button className="small-btn good" data-act="add-what" onClick={() => create({ kind: 'what', level, type, text: add.text })}>Add {type}</button>
+          <div className="row">
+            <HeatSelect name="add-heat" value={add.heat} onChange={(v) => setAdd({ ...add, heat: v })} />
+            <SecondsInput name="add-seconds" value={add.seconds} onChange={(v) => setAdd({ ...add, seconds: v })} />
+            <button className="small-btn good" data-act="add-what" onClick={() => create({ kind: 'what', level, type, text: add.text, heat: add.heat ?? 2, seconds: add.seconds ?? null })}>Add {type}</button>
+          </div>
         </>
       )}
 
@@ -112,11 +131,12 @@ export default function BankPanel() {
                 {edit?.key === w ? (
                   <>
                     <input className="input" style={{ minHeight: 30, width: 110 }} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-                    <button className="small-btn good" onClick={() => save('where', w, { name: edit.name })}>✓</button>
+                    <HeatSelect name="where-heat" value={edit.heat} onChange={(v) => setEdit({ ...edit, heat: v })} />
+                    <button className="small-btn good" data-act="save-where" onClick={() => save('where', w, { name: edit.name, heat: edit.heat })}>✓</button>
                   </>
                 ) : (
                   <>
-                    <span onClick={() => setEdit({ key: w, name: w })}>{w}</span>
+                    <span onClick={() => setEdit({ key: w, name: w, heat: bank.whereHeat?.[w] ?? 2 })}>{w} <small data-where-heat={bank.whereHeat?.[w] ?? 2}>{FLAMES[bank.whereHeat?.[w] ?? 2]}</small></span>
                     <button className="x" aria-label={`Delete ${w}`} onClick={() => del('where', w, w)}>✕</button>
                   </>
                 )}

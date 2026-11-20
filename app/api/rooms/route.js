@@ -1,5 +1,5 @@
 import { route, json, readJson, HttpError } from '@/lib/http';
-import { createRoom, validatePlayers, validateLevel, publicRoom, getRoom } from '@/lib/game';
+import { createRoom, validatePlayers, validateLevel, publicRoom } from '@/lib/game';
 import { isGameEnabled } from '@/lib/games';
 import { throttle } from '@/lib/auth';
 
@@ -12,6 +12,7 @@ export const POST = route(async (req) => {
   const level = validateLevel(body.level);
   const t = await throttle(req, 'room'); // max 20 rooms / 15 min per IP
   await t.fail();
-  const { code, token } = await createRoom({ game, level, players, genders });
-  return json({ token, room: publicRoom(await getRoom(code)) }, 201);
+  const { token, row, secret } = await createRoom({ game, level, players, genders });
+  // The secret animals go ONLY to the creating (host) device, for the private pass-the-phone reveal.
+  return json({ token, room: publicRoom(row, { lite: true }), secret }, 201);
 }, { mutation: true });
