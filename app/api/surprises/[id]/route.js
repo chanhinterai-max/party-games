@@ -1,17 +1,24 @@
 import { route, json, readJson } from '@/lib/http';
 import { requireRole, audit } from '@/lib/auth';
-import { surpriseUpdate, surpriseDelete, deckUpdate, deckDelete } from '@/lib/surprises';
+import { surpriseUpdate, surpriseDelete, poolUpdate, poolDelete, humanUpdate, humanDelete } from '@/lib/surprises';
 
-const isDeck = (id) => String(id).startsWith('deck-');
+// id prefix picks the table: 'an-' animal pool, 'hu-' Human items, otherwise surprise items.
+const kindOf = (id) => (String(id).startsWith('an-') ? 'pool' : String(id).startsWith('hu-') ? 'human' : 'surprise');
 
 export const PATCH = route(async (req, { params }) => {
   const user = await requireRole(req, ['admin', 'advanced']);
   const { id } = await params;
   const body = await readJson(req, 8 * 1024);
-  if (isDeck(id)) {
-    const animal = await deckUpdate(id, body);
-    await audit(user, 'deck_update', id, { name: animal.name }, req);
+  const k = kindOf(id);
+  if (k === 'pool') {
+    const animal = await poolUpdate(id, body);
+    await audit(user, 'pool_update', id, { name: animal.name }, req);
     return json({ animal });
+  }
+  if (k === 'human') {
+    const human = await humanUpdate(id, body);
+    await audit(user, 'human_update', id, null, req);
+    return json({ human });
   }
   const surprise = await surpriseUpdate(id, body);
   await audit(user, 'surprise_update', id, null, req);
@@ -21,7 +28,8 @@ export const PATCH = route(async (req, { params }) => {
 export const DELETE = route(async (req, { params }) => {
   const user = await requireRole(req, ['admin', 'advanced']);
   const { id } = await params;
-  const r = isDeck(id) ? await deckDelete(id) : await surpriseDelete(id);
-  await audit(user, isDeck(id) ? 'deck_delete' : 'surprise_delete', id, null, req);
+  const k = kindOf(id);
+  const r = k === 'pool' ? await poolDelete(id) : k === 'human' ? await humanDelete(id) : await surpriseDelete(id);
+  await audit(user, `${k}_delete`, id, null, req);
   return json(r);
 }, { mutation: true });

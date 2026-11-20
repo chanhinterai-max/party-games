@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 
-// Admin-only: how often a surprise card appears after a finished turn (server-enforced).
+// Admin-only: surprise cards as a share of total questions (server-enforced; fixed per game at Start).
 export default function SurpriseRatePanel() {
   const [d, setD] = useState(null);
   const [msg, setMsg] = useState('');
@@ -16,7 +16,7 @@ export default function SurpriseRatePanel() {
   return (
     <section className="panel" data-section="surprise-rate">
       <h3>✨ Surprise cards</h3>
-      <label className="field">Chance of a surprise card after each turn (%, {d.range[0]}-{d.range[1]}; default 10)
+      <label className="field">Surprise cards as a share of total questions (%, {d.range[0]}-{d.range[1]}; default 10 = 1 surprise per 10 questions, at random turns)
         <input className="input" type="number" min={d.range[0]} max={d.range[1]} name="surprise-rate" value={d.rate}
           onChange={(e) => setD({ ...d, rate: e.target.value === '' ? '' : Number(e.target.value) })} />
       </label>

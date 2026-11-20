@@ -1,4 +1,4 @@
-# 🍸 Party Games
+# 🐾 Party Animal
 
 Mobile-first party games for 2–16 players, made for bars and clubs. One phone, passed around the group.
 Next.js on Vercel with Postgres (Neon). See [ARCHITECTURE.md](./ARCHITECTURE.md).

@@ -12,7 +12,7 @@ export const POST = route(async (req) => {
   const level = validateLevel(body.level);
   const t = await throttle(req, 'room'); // max 20 rooms / 15 min per IP
   await t.fail();
-  const { token, row, secret } = await createRoom({ game, level, players, genders });
-  // The secret animals go ONLY to the creating (host) device, for the private pass-the-phone reveal.
-  return json({ token, room: publicRoom(row, { lite: true }), secret }, 201);
+  const { token, row } = await createRoom({ game, level, players, genders });
+  // v6: animals are public (room.animals) and shown openly on the shared screen.
+  return json({ token, room: publicRoom(row, { lite: true }) }, 201);
 }, { mutation: true });

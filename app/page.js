@@ -14,7 +14,7 @@ export default async function Home() {
   return (
     <>
       <header className="hero">
-        <h1>Party Games</h1>
+        <h1>Party Animal</h1>
         <p className="tagline">Small sips, big secrets. Pass the phone and bring the vibe.</p>
         <span className="pill">👥 2–16 players · one phone</span>
       </header>

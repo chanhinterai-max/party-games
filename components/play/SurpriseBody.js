@@ -4,7 +4,8 @@ import Timer from './Timer';
 import Chooser from './Chooser';
 
 const TITLES = {
-  match: '🐾 Animal Match!',
+  match: '🐾 Animal Match · predator & prey',
+  human: '🧍 Human’s turn',
   virus: '🦠 Virus rule · 3 turns',
   vote: '👉 Group vote',
   whisper: '🤫 Whisper',
@@ -31,7 +32,12 @@ export default function SurpriseBody({ sp, players }) {
   return (
     <>
       <div className="kind" data-surprise-type={sp.type}>✨ Surprise · {TITLES[sp.type] || sp.type}</div>
-      {sp.type === 'match' && <div className="match-pair" data-match-pair>{sp.a} <span>💞</span> {sp.b}</div>}
+      {sp.type === 'match' && (
+        <div className="match-pair" data-match-pair>
+          <span data-match-a>{sp.a}{sp.pair?.[0] && <small> ({sp.pair[0]})</small>}</span> <span>🐾</span> <span data-match-b>{sp.b}{sp.pair?.[1] && <small> ({sp.pair[1]})</small>}</span>
+        </div>
+      )}
+      {sp.type === 'human' && sp.player && <div className="match-pair" data-human-player>🧍 {sp.player}</div>}
       {sp.type === 'whisper' ? (
         <>
           <p className="count">{sp.player ? <><b>{sp.player}</b>: </> : null}peek privately, then whisper a name to the person on your left. The named person can take a sip to hear the question!</p>

@@ -3,8 +3,10 @@ import './globals.css';
 import AuthButton from '@/components/AuthButton';
 
 export const metadata = {
-  title: 'Party Games · Bring the Vibe',
-  description: 'Party games for 2 to 16 players. Pass the phone, bring the vibe.',
+  title: 'Party Animal · Bring the Vibe',
+  description: 'Party Animal: party games for 2 to 16 players on one screen. Predators, prey and small sips.',
+  applicationName: 'Party Animal',
+  openGraph: { title: 'Party Animal', description: 'Party games for 2 to 16 players on one screen. Predators, prey and small sips.', siteName: 'Party Animal', type: 'website' },
   icons: { icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍸</text></svg>" },
 };
 export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#0b0614' };
@@ -16,7 +18,7 @@ export default function RootLayout({ children }) {
         <div className="bg-glow" aria-hidden="true" />
         <div className="app">
           <header className="site-head">
-            <Link href="/" className="brand">🍸 Party Games</Link>
+            <Link href="/" className="brand">🐾 Party Animal</Link>
             <AuthButton />
           </header>
           <main>{children}</main>

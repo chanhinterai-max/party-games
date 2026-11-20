@@ -20,66 +20,22 @@ const load = (k, f) => { try { return JSON.parse(localStorage.getItem(k)) ?? f; 
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const Shimmer = ({ w = '80%', h = 22 }) => <span className="shimmer" style={{ width: w, height: h }} aria-hidden="true" />;
 
-// Pass-the-phone private reveal of each player's secret Animal Match animal.
-function AnimalReveal({ players, animals, onDone }) {
-  const [i, setI] = useState(0);
-  const [show, setShow] = useState(false);
-  const p = players[i];
-  const a = animals[p];
-  const last = i === players.length - 1;
+const ROLE_LABEL = { predator: '🦷 Predator', prey: '🌿 Prey', human: '🧍 Human', animal: '🐾 Animal' };
+// v6: everyone plays on one screen, so animals are shown openly (no private reveal).
+function AnimalList({ players, animals, genders }) {
   return (
-    <div className="reveal-stage" data-reveal-stage>
-      <div className="label" style={{ textAlign: 'center' }}>🐾 Secret animals · {i + 1} / {players.length}</div>
-      {!show ? (
-        <div className="reveal-card">
-          <div className="big">📱</div>
-          <p>Pass the phone to <b data-reveal-player>{p}</b></p>
-          <p className="count">Only {p} should look at the screen!</p>
-          <button className="btn btn-primary" data-act="reveal-show" onClick={() => setShow(true)}>I’m {p}: show my animal 👀</button>
-        </div>
-      ) : (
-        <div className="reveal-card shown">
-          <div className="big" data-secret-emoji>{a?.emoji || '🐾'}</div>
-          <p>You are the <b data-secret-name>{a?.name || 'Mystery'}</b></p>
-          <p className="count">Remember it and keep it secret 🤫. When your animal is called, it’s your moment!</p>
-          <button className="btn btn-primary" data-act="reveal-hide" onClick={() => { setShow(false); if (last) onDone(); else setI(i + 1); }}>
-            {last ? 'Hide & start the game 🔥' : 'Hide & pass it on ➜'}</button>
-        </div>
-      )}
-      <button className="btn btn-ghost" style={{ marginTop: 12 }} data-act="reveal-skip-all" onClick={onDone}>Skip for now (peek later with 🐾)</button>
-    </div>
-  );
-}
-
-// Re-peek one player's animal later (forgot it / skipped the reveal).
-function PeekAnimal({ players, animals, onClose }) {
-  const [who, setWho] = useState(null);
-  const [show, setShow] = useState(false);
-  return (
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label="Peek your secret animal" onClick={(e) => e.stopPropagation()} data-peek>
-        {!who ? (
-          <>
-            <div className="big">🐾</div>
-            <p>Who wants to peek at their secret animal?</p>
-            <div className="chips" style={{ justifyContent: 'center' }}>
-              {players.map((p) => <button key={p} className="chip" data-peek-player={p} onClick={() => setWho(p)}>{p}</button>)}
-            </div>
-          </>
-        ) : !show ? (
-          <>
-            <p>Only <b>{who}</b> should look!</p>
-            <button className="btn btn-primary" data-act="peek-show" onClick={() => setShow(true)}>Show 👀</button>
-          </>
-        ) : (
-          <>
-            <div className="big">{animals?.[who]?.emoji || '🐾'}</div>
-            <p>{who}, you are the <b data-peek-name>{animals?.[who]?.name || 'Mystery'}</b></p>
-          </>
-        )}
-        <button className="btn btn-ghost" style={{ marginTop: 12 }} data-act="peek-close" onClick={onClose}>Hide</button>
-      </div>
-    </div>
+    <ul className="animal-list">
+      {players.map((p) => {
+        const a = animals?.[p];
+        return (
+          <li key={p} className={`animal-row role-${a?.role || 'animal'}`} data-animal-row={p} data-role={a?.role || ''} data-animal-id={a?.id || ''}>
+            <span className="animal-emoji" aria-hidden="true">{a?.emoji || '🐾'}</span>
+            <span className="animal-who"><b><GenderDot gender={genders?.[p]} />{p}</b><small data-animal-name>{a?.name || 'Mystery'}</small></span>
+            <span className={`role-tag ${a?.role || ''}`}>{ROLE_LABEL[a?.role] || ROLE_LABEL.animal}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -93,9 +49,7 @@ export default function TruthOrDare() {
   const [busy, setBusy] = useState(false);
   // v5 instant feel: the tapped action drives the UI immediately; the server response fills in content.
   const [pending, setPending] = useState(null); // 'truth' | 'dare' | 'next' | 'chicken' | 'surprise' | 'level' | 'end'
-  const [secret, setSecret] = useState(null); // { animals } (host device only)
-  const [revealing, setRevealing] = useState(false);
-  const [peekOpen, setPeekOpen] = useState(false);
+  const [revealing, setRevealing] = useState(false); // v6 open animal list shown once after Start
   const [reduced, setReduced] = useState(false);
   const [toast, setToast] = useState('');
   const [reveal, setReveal] = useState(null);
@@ -119,13 +73,7 @@ export default function TruthOrDare() {
     if (r?.code && r?.token) {
       api(`/api/rooms/${r.code}`).then((d) => {
         setRoom(d.room); setToken(r.token);
-        if (d.room.status === 'active') {
-          // Secret animals are never in the public room: fetch them with the host token (reload only).
-          api(`/api/rooms/${r.code}/secret`, { headers: { 'x-room-token': r.token } }).then((s) => {
-            setSecret(s);
-            if (r.revealed === false) setRevealing(true);
-          }).catch(() => {});
-        }
+        if (d.room.status === 'active' && r.revealed === false) setRevealing(true);
       }).catch(() => save(STORE_ROOM, null));
     }
   }, []);
@@ -158,8 +106,7 @@ export default function TruthOrDare() {
       setPlayers(filled);
       setToken(d.token);
       setRoom(d.room);
-      setSecret(d.secret || null);
-      setRevealing(!!d.secret?.animals && Object.keys(d.secret.animals).length > 0);
+      setRevealing(true);
       window.scrollTo(0, 0);
     } catch (e) {
       setError(e.message);
@@ -207,7 +154,6 @@ export default function TruthOrDare() {
     save(STORE_ROOM, null);
     setRoom(null);
     setToken(null);
-    setSecret(null);
     setRevealing(false);
   }
 
@@ -217,7 +163,11 @@ export default function TruthOrDare() {
     window.scrollTo(0, 0);
   }
 
-  const animals = <RunningAnimals onPettedChange={onPetted} petMs={petMs} />;
+  // v6: in a game the running animals ARE the players' animals (the Human runs as 🏃).
+  const roomAnimals = room?.animals && room.status === 'active'
+    ? room.players.map((p) => room.animals[p]).filter(Boolean).map((a) => ({ id: a.id, emoji: a.role === 'human' ? '🏃' : a.emoji, happy: a.role === 'human' ? '🧍' : a.emoji, name: a.name }))
+    : null;
+  const animals = <RunningAnimals key={room?.code || 'setup'} animals={roomAnimals} onPettedChange={onPetted} petMs={petMs} />;
 
   if (!room) {
     const lvl = LEVELS.find((l) => l.id === level);
@@ -299,7 +249,8 @@ export default function TruthOrDare() {
   const g = room.genders || {};
   const cat = reveal && DRINK_CATEGORIES.find((c) => c.id === reveal.category);
   const sp = room.surprise;
-  if (revealing && secret?.animals) {
+  if (revealing) {
+    const has = (r) => Object.values(room.animals || {}).filter((a) => a.role === r).length;
     return (
       <>
         <div className="topbar" style={{ marginTop: 8 }}>
@@ -307,8 +258,13 @@ export default function TruthOrDare() {
           <span className={`badge ${lvl.id}`}>{lvl.emoji} {lvl.name}</span>
           <span style={{ width: 44 }} />
         </div>
-        <p className="room-code">Room code<b data-room-code>{room.code}</b></p>
-        <AnimalReveal players={room.players} animals={secret.animals} onDone={finishReveal} />
+        <div className="reveal-stage" data-reveal-stage>
+          <h2 className="reveal-title">🐾 Meet the party animals!</h2>
+          <p className="count" style={{ textAlign: 'center' }}>{has('predator')} predators · {has('prey')} prey{has('human') ? ' · 1 Human' : ''}</p>
+          <AnimalList players={room.players} animals={room.animals} genders={room.genders} />
+          <p className="count" style={{ textAlign: 'center' }}>When your animal is called in a surprise, it’s your moment! Check again anytime in 🐾 Animals.</p>
+          <button className="btn btn-primary" data-act="begin" onClick={finishReveal}>Let the party begin 🔥</button>
+        </div>
       </>
     );
   }
@@ -363,7 +319,7 @@ export default function TruthOrDare() {
               </>
             ) : card ? (
               <>
-                <div className="kind">{card.type === 'truth' ? '🤫 Truth' : '🔥 Dare'}</div>
+                <div className="kind" data-human-card={card.human ? '1' : undefined}>{card.type === 'truth' ? '🤫 Truth' : '🔥 Dare'}{card.human ? ' · 🧍 Human card' : ''}</div>
                 <div className="text card-in" data-card-text key={card.itemId}>
                   <WithDot text={card.text} name={card.whoIsPlayer || card.whoRef?.kind === 'player' ? card.who : null} gender={g[card.who]} />
                 </div>
@@ -406,15 +362,17 @@ export default function TruthOrDare() {
           </button>
         ))}
       </div>
+      <details className="animals-box" data-animals-box>
+        <summary>🐾 Animals <small>{room.players.length} players</small></summary>
+        <AnimalList players={room.players} animals={room.animals} genders={g} />
+      </details>
       <div className="scores" aria-label="Chicken-outs">
         {room.players.map((p) => <span key={p}><GenderDot gender={g[p]} />{p} · {room.sips?.[p] || 0} 🐔</span>)}
       </div>
       <div className="section row">
-        {secret?.animals && <button className="btn btn-ghost" data-act="peek-animal" onClick={() => setPeekOpen(true)}>🐾 My animal</button>}
         <button className={`btn btn-ghost ${pending === 'end' ? 'is-pending' : ''}`} data-act="end-game" disabled={busy} onClick={endByHost}>End game 🏁</button>
       </div>
       <p className="footer">Drink responsibly. Water always counts. 💜</p>
-      {peekOpen && <PeekAnimal players={room.players} animals={secret?.animals} onClose={() => setPeekOpen(false)} />}
       {reveal && (
         <div className="modal-back" onClick={() => setReveal(null)}>
           <div className="modal" role="dialog" aria-label="Chicken out result" data-reveal={reveal.category} onClick={(e) => e.stopPropagation()}>

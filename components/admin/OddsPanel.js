@@ -9,7 +9,9 @@ export default function OddsPanel() {
   const [msg, setMsg] = useState('');
   useEffect(() => { api('/api/admin/chicken-odds').then(setD).catch((e) => setMsg(e.message)); }, []);
   if (!d) return <section className="panel"><h3>Chicken-out odds</h3><p className="count">{msg || 'Loading…'}</p></section>;
-  const { odds, animals } = d;
+  const { odds } = d;
+  // Legacy saved target (e.g. 'kitten' from v3-v5) stays selectable until changed.
+  const targets = d.targets.some((t) => t.id === odds.rule.animal) ? d.targets : [...d.targets, { id: odds.rule.animal, label: `${odds.rule.animal} (legacy)` }];
   const set = (path, val) => {
     const o = structuredClone(odds);
     if (path[0] === 'normal') o.normal[path[1]] = val;
@@ -45,9 +47,9 @@ export default function OddsPanel() {
       <label className="toggle"><span>Rule enabled</span>
         <input type="checkbox" name="rule-enabled" checked={odds.rule.enabled} onChange={(e) => set(['rule', 'enabled'], e.target.checked)} />
       </label>
-      <label className="field">When this animal is being petted
+      <label className="field">When a running animal of this kind is being petted (the running animals are the players’ animals)
         <select className="input" name="rule-animal" value={odds.rule.animal} onChange={(e) => set(['rule', 'animal'], e.target.value)}>
-          {animals.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>)}
+          {targets.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
         </select>
       </label>
       <label className="field">Petted duration (seconds, {d.petRange[0]}-{d.petRange[1]}): hearts show this long, and the rule only applies inside this window

@@ -422,10 +422,28 @@ textarea.input { min-height: 90px; padding: 10px 14px; width: 100%; font-family:
 
 /* Secret animal reveal */
 .reveal-stage { margin-top: 12px; }
-.reveal-card { border-radius: 24px; padding: 24px 18px; text-align: center; background: #1a1030; border: 1.5px solid var(--purple); }
-.reveal-card.shown { border-color: var(--amber); box-shadow: 0 0 30px rgba(255,179,64,.35); }
-.reveal-card .big { font-size: 4rem; line-height: 1.1; }
-.reveal-card p { font-size: 1.1rem; }
+/* v6 open animal list (reveal screen + collapsible Animals box) */
+.reveal-title { text-align: center; margin: 6px 0 2px; font-size: 1.35rem; }
+.animal-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 8px; }
+.animal-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 16px; background: #1a1030; border: 1.5px solid #3a2a5c; }
+.animal-row.role-predator { border-color: #ff6b6b66; }
+.animal-row.role-prey { border-color: #7ee08166; }
+.animal-row.role-human { border-color: var(--amber); }
+.animal-emoji { font-size: 1.9rem; line-height: 1; width: 2.2rem; text-align: center; }
+.animal-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.animal-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.animal-who small { opacity: .8; }
+.role-tag { font-size: .8rem; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: #2a1b48; white-space: nowrap; }
+.role-tag.predator { color: #ff9a9a; }
+.role-tag.prey { color: #a6f0a8; }
+.role-tag.human { color: var(--amber); }
+.animals-box { margin-top: 14px; border-radius: 16px; background: #140b26; border: 1.5px solid #3a2a5c; padding: 0 12px; pointer-events: auto; }
+.animals-box > summary { cursor: pointer; padding: 12px 0; font-weight: 800; list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+.animals-box > summary::-webkit-details-marker { display: none; }
+.animals-box > summary::after { content: '▾'; transition: transform .15s; }
+.animals-box[open] > summary::after { transform: rotate(180deg); }
+.animals-box > summary small { margin-left: auto; margin-right: 8px; opacity: .7; font-weight: 600; }
+.animals-box .animal-list { margin-top: 0; }
 
 /* Confetti (results) */
 .confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 60; }

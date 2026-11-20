@@ -1,24 +1,24 @@
 # Architecture
 
-Party Games is a single **Next.js 16 (App Router)** app on **Vercel**. The pages run in the
+**Party Animal** (repo/project `party-games`) is a single **Next.js 16 (App Router)** app on **Vercel**. The pages run in the
 phone's browser, the API runs as Vercel Functions (Node.js), and all state lives in
 **Postgres (Neon, via the Vercel Marketplace)**. Nothing secret is stored in the repo.
 
 ```mermaid
 flowchart LR
   subgraph Browser["📱 Phone / browser"]
-    P["Player screen /play/truth-or-dare<br/>secret-animal reveal, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔, confetti results"]
-    A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + animal decks"]
-    D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>chicken odds + rule, surprise rate, games, rooms, audit"]
+    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔, running party animals, confetti results"]
+    A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool"]
+    D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>chicken odds + pet-rule target, surprise share, games, rooms, audit"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
-    R1["/api/rooms/*<br/>create (+ secret animals), draw / done / chicken /<br/>surprise_done / level / end · secret · idle close · results"]
+    R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end · idle close · results"]
     R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises"]
     R3["/api/auth/* · /api/setup"]
     R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, games, rooms, audit"]
-    L["lib/: game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js + seed-v5.js are server-only)"]
+    L["lib/: game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
   end
-  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_deck<br/>user_categories · settings (drinks, odds, pet, surprise, seed_v5)")]
+  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_pool (predator/prey) · human_items<br/>user_categories · settings (drinks, odds, pet, surprise, seed_v5, seed_v6)")]
   P -- "JSON + x-room-token" --> R1
   A -- "httpOnly session cookie" --> R2
   D -- "httpOnly session cookie" --> R4
@@ -32,13 +32,15 @@ flowchart LR
 ```
 party-games/
 ├── app/                              ── UI pages (browser) + API routes (server)
-│   ├── layout.js                     Site shell; Login button top-right (components/AuthButton.js)
-│   ├── page.js                       Home: game tiles, hides games disabled by the admin
+│   ├── layout.js                     Site shell + "Party Animal" title/metadata/brand; Login button (AuthButton.js)
+│   ├── page.js                       Home ("Party Animal"): game tiles, hides games disabled by the admin
 │   ├── globals.css                   Neon/dark mobile-first styles (+ gender dots, chicken modal, animals)
-│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names + Male/Female, level, room code, secret-animal
-│   │                                 pass-the-phone reveal (+ "🐾 My animal" re-peek), heat meter, virus banner,
+│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names + Male/Female, level, room code, OPEN animal list after
+│   │                                 Start (name, gender dot, emoji, animal, Predator/Prey/Human) + collapsible
+│   │                                 🐾 Animals box (native <details>, no server call), heat meter, virus banner,
 │   │                                 3D flip card (Truth cyan / Dare pink / Surprise amber, shimmer while the
-│   │                                 single draw request is in flight), timers, Chicken out 🐔, running animals,
+│   │                                 single draw request is in flight), timers, Chicken out 🐔, running animals =
+│   │                                 the players' own animals (Human = 🏃), "🧍 Human card" label,
 │   │                                 End game, results + confetti
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
@@ -48,17 +50,17 @@ party-games/
 │   │                                 bank, chicken odds + hidden rule, drinks, games, live rooms, audit
 │   └── api/
 │       ├── games/route.js            GET enabled games (public)
-│       ├── rooms/route.js            POST create room (players with gender) → code + host token
+│       ├── rooms/route.js            POST create room (players with gender) → code + host token + public animals
 │       ├── rooms/[code]/route.js     GET public room state (no odds / rule ever exposed)
 │       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted:[{id,elapsedMs}]} | surprise_done | level | end
 │       │                                 (host token; response = new state, no history → no refetch)
-│       ├── rooms/[code]/secret/route.js  GET the room's secret animals (host token only; used after a reload)
 │       ├── rooms/[code]/queue/route.js   GET/PUT hidden question queues (advanced/admin)
 │       ├── me/categories/…           QUICK CATEGORIES: GET/POST, PATCH/DELETE [id] (own only)
 │       ├── config/route.js           GET public UI config (petted duration seconds)
 │       ├── drinks/route.js           DRINK OPTIONS: GET/PUT global chicken-out drinks (advanced/admin)
-│       ├── surprises/route.js        SURPRISE CONTENT + DECKS: GET all / POST surprise or {kind:'animal'} (advanced/admin, GLOBAL)
-│       ├── surprises/[id]/route.js   PATCH / DELETE a surprise (sp-…) or a deck animal (deck-…)
+│       ├── surprises/route.js        SURPRISE CONTENT + ANIMAL POOL + HUMAN ITEMS: GET all / POST surprise,
+│       │                             {kind:'animal', role} or {kind:'human', humanKind} (advanced/admin, GLOBAL)
+│       ├── surprises/[id]/route.js   PATCH / DELETE a surprise (sp-…), pool animal (an-…, min 8 per side) or Human item (hu-…)
 │       ├── auth/login|logout|me/route.js  Session login/logout/current user
 │       ├── setup/route.js            One-time admin bootstrap (refuses once an admin exists)
 │       └── admin/
@@ -68,8 +70,9 @@ party-games/
 │           ├── users/[id]/password/route.js  POST reset password (revokes sessions)
 │           ├── bank/route.js         QUESTION BANK: GET all / POST add WHO|WHAT|WHERE
 │           ├── bank/[kind]/[id]/route.js  PATCH edit / DELETE bank entry
-│           ├── chicken-odds/route.js ANIMAL RULE: GET/PUT odds, hidden rule, petted duration (3-300 s)
-│           ├── surprise-rate/route.js SURPRISE RATE: GET/PUT % chance after each turn (admin only, 0-100, default 10)
+│           ├── chicken-odds/route.js ANIMAL RULE: GET/PUT odds, hidden rule (target any-prey | any-predator | human |
+│           │                         pool animal id), petted duration (3-300 s); GET returns the target list
+│           ├── surprise-rate/route.js SURPRISE SHARE: GET/PUT surprise cards as % of total questions (admin, 0-50, default 10)
 │           ├── games/route.js        GET/PATCH home-page game toggles
 │           ├── rooms/route.js        GET live rooms (last 12h)
 │           └── audit/route.js        GET last 100 audit entries
@@ -80,18 +83,21 @@ party-games/
 │   ├── DrinksEditor.js               Global chicken-out drink options
 │   ├── GenderDot.js                  Blue (male) / pink (female) solid circle next to names
 │   ├── Results.js                    End-of-game results (awards, titles, pairs) for players + advanced view
-│   ├── RunningAnimals.js             CSS-animated baby animals; tap = petted 20 s (reduced-motion aware); they run
+│   ├── RunningAnimals.js             CSS-animated animals (in a game: the players' animals, up to 16 lanes; setup:
+│   │                                 generic babies); tap = petted 20 s (reduced-motion aware); they run
 │   │                                 BEHIND the UI (z-index -1) so they never block a button but stay tappable
-│   ├── SurpriseEditor.js             Surprise cards (type/level/text/on-off/timer) + female/male animal decks
+│   ├── SurpriseEditor.js             Surprise cards (type/level/text/on-off/timer), 🧍 Human tab (surprise/truth/
+│   │                                 dare) + predator/prey animal pool
 │   │                                 (advanced room view + admin page; loads only when opened)
 │   ├── play/Timer.js                 Countdown (Start/Pause + Reset), runs only on the phone
 │   ├── play/Confetti.js              Hand-rolled CSS confetti (36 spans, after first paint, reduced-motion off)
-│   ├── play/SurpriseBody.js          Surprise face: Animal Match, Virus, Group vote (1-2-3), Whisper (peek), Chooser
+│   ├── play/SurpriseBody.js          Surprise face: Animal Match (predator + prey, with player names), Human,
+│   │                                 Virus, Group vote (1-2-3), Whisper (peek), Chooser
 │   ├── play/Chooser.js               Dare Chooser: multi-touch finger pick + tap-to-join fallback
 │   ├── admin/AccountPanel.js         Change own username / password
 │   ├── admin/BankPanel.js            Manage WHO / WHAT (+ heat 1-3, timer seconds) / WHERE (+ heat) bank
-│   ├── admin/SurpriseRatePanel.js    Surprise-card rate (admin only)
-│   ├── admin/OddsPanel.js            Chicken odds + hidden rule settings
+│   ├── admin/SurpriseRatePanel.js    Surprise cards as a share of total questions (admin only)
+│   ├── admin/OddsPanel.js            Chicken odds + hidden rule (pet-rule target select)
 │   └── api.js                        fetch helper
 ├── lib/                              ── server-side logic
 │   ├── content.js                    CLIENT-SAFE constants only (levels, private-part blocklist, running
@@ -101,21 +107,26 @@ party-games/
 │   ├── seed-v5.js                    SERVER-ONLY v5 seed: 40 Adult items, pick-a-partner + two-player dares,
 │   │                                 timed items, surprise cards for every type × level, female/male decks,
 │   │                                 one-time heat/seconds guesses for existing rows
-│   ├── bank.js                       QUESTION BANK (DB): load (10 s per-instance cache, invalidated on writes)
+│   ├── seed-v6.js                    SERVER-ONLY v6 seed: 20-animal pool (10 predators / 10 prey), predator-plays-
+│   │                                 with-prey Animal Match texts, v5→v6 match rewrites, Human surprise/truth/dare
+│   ├── bank.js                       QUESTION BANK (DB): load (10 s per-instance cache, invalidated on writes;
+│   │                                 also carries enabled Human truth/dare items)
 │   │                                 + validated CRUD for bank_who/what/where incl. heat + seconds; {partner}
-│   ├── settings.js                   SETTINGS: drink options, odds + animal rule, petted duration, surprise
-│   │                                 rate (settings table); server-side drink pick + petted-window check
-│   ├── surprises.js                  SURPRISE CONTENT + ANIMAL DECKS (surprise_items, animal_deck): validated CRUD
+│   ├── settings.js                   SETTINGS: drink options, odds + pet-rule target (ruleHit), petted duration,
+│   │                                 surprise share (settings table); server-side drink pick + petted-window check
+│   ├── surprises.js                  SURPRISE CONTENT + ANIMAL POOL + HUMAN ITEMS (surprise_items, animal_pool,
+│   │                                 human_items): validated CRUD; atomic "keep ≥ 8 per side" delete
 │   ├── categories.js                 QUICK CATEGORIES (user_categories table), per-user seeding
 │   ├── game.js                       ROOM/QUEUE LOGIC: codes, genders, queues (players × 10, heat-ordered mild →
 │   │                                 hot + jitter), question budget, turns, draw/done/chicken/surprise_done/level/
-│   │                                 end, server-rolled surprises + 3-turn virus, secret animal assignment,
+│   │                                 end, surprise schedule fixed at Start + 3-turn virus, 1:1 predator/prey
+│   │                                 assignment (+ Human on odd counts), Human Truth/Dare draws (1 in 3),
 │   │                                 idle close (inside the action transaction), per-turn stats
 │   ├── results.js                    STATS/RESULTS LOGIC: state.stats shape, awards, ties, funny titles, pairs
 │   ├── auth.js                       SESSION/AUTH LOGIC: Argon2id, login + lockout, IP throttling,
 │   │                                 session tokens (SHA-256 in DB), roles, audit log
 │   ├── db.js                         DATABASE SCHEMA + idempotent additive migrations + first-run seeding +
-│   │                                 one-time `seed_v5` (inserts only missing rows; never wipes edits)
+│   │                                 one-time `seed_v5` / `seed_v6` (inserts only missing rows; never wipes edits)
 │   ├── games.js                      Home-page game slots registry (add new games here)
 │   └── http.js                       JSON responses, Origin (CSRF) check, input validation, errors
 ├── next.config.mjs                   Security headers (HSTS, nosniff, frame deny, …)
@@ -130,14 +141,16 @@ party-games/
 |---|---|
 | Question bank (live) | Postgres `bank_who`, `bank_what` (+ `heat` 1-3, `seconds`), `bank_where` (+ `heat`) (edited on /admin; seeded once from `lib/seed.js` + `lib/seed-v5.js`) |
 | Surprise cards | `surprise_items` table (type match/virus/vote/whisper/chooser, level, text, enabled, seconds); GLOBAL, edited by advanced players + admins |
-| Animal Match decks | `animal_deck` table (deck female/male, name, emoji); GLOBAL, edited by advanced players + admins |
-| Secret animals per room | `rooms.state.animals` (player → deck, name, emoji); only sent to the host device (create response / `/secret`) and revealed in results |
-| Surprise rate | `settings` row `surprise` = `{rate}` (admin only, default 10 %) |
-| Open surprise / virus | `rooms.state.surprise` (Animal Match pair kept server-side only), `rooms.state.virus` `{text, turnsLeft}` |
-| v5 seed marker | `settings` row `seed_v5` (the v5 inserts/heat guesses ran once; deleted items are not re-added) |
+| **Animal pool (v6)** | `animal_pool` table (id `an-…`, role predator/prey, name, emoji, sort); 10 + 10 seeded; GLOBAL, edited by advanced players + admins; deletes blocked below 8 per side. (The v5 `animal_deck` table is kept but unused.) |
+| **Human items (v6)** | `human_items` table (id `hu-…`, kind surprise/truth/dare, level, text, enabled, seconds); GLOBAL, same editors |
+| Animals per room | `rooms.state.animals` (player → {id, role predator/prey/human, name, emoji}); PUBLIC in the room state, shown on the reveal list, the 🐾 Animals box, the running animals and results |
+| Surprise share | `settings` row `surprise` = `{rate}` = % of total questions (admin only, 0-50, default 10 → 1 per 10 questions) |
+| Surprise schedule per room | `rooms.state.surpriseAt` (finished-turn numbers, fixed at Start, never sent to the phone) + `state.turnsDone` |
+| Open surprise / virus | `rooms.state.surprise` (`pair` = [predator player, prey player] for Animal Match), `rooms.state.virus` `{text, turnsLeft}` |
+| Seed markers | `settings` rows `seed_v5`, `seed_v6` (each one-time; deleted items are not re-added; v6 rewrote only unchanged v5 match texts and switched the pet rule 'kitten' → 'any-prey' only if it was still the default) |
 | Quick categories | `user_categories` table (one row per category, per user; `who_rule`, `what_ids`, `where_list`) |
 | Chicken-out drink options | `settings` row `drinks` (global; edited by advanced players and admins) |
-| Chicken odds + hidden animal rule | `settings` row `odds` (admin only; outcome picked server-side in `lib/settings.js`) |
+| Chicken odds + hidden animal rule | `settings` row `odds` (admin only; `rule.animal` = any-prey (default) / any-predator / human / pool id; outcome picked server-side in `lib/settings.js`) |
 | Player genders | `rooms.genders` JSONB (name → male/female) |
 | Petted duration (= secret-rule window) | `settings` row `pet` = `{seconds}` (default 20, 3-300) |
 | Room lifecycle | `rooms.status` (active / ended / closed), `closed_reason` (complete / host / idle), `ended_at`, `last_activity` (last Truth/Dare pick) |
@@ -183,11 +196,18 @@ party-games/
    a shimmer until the response arrives (no prefetch, no cached cards; the server queue stays the source of truth).
    Next / Chicken / surprise Done flip back immediately. Every action button is disabled while its request is in
    flight (double-tap guard), and the action response is the new state (no refetch except after a 409).
-10. **Surprises (v5)**: after each finished turn the server rolls `rate` %; if hit, it picks a type among the enabled
-   surprise items for the level. A surprise is its own turn (`surprise_done`), consumes no queue question and does not
-   count toward players × 10. Animal Match calls one female-deck + one male-deck secret animal (any two players in a
-   single-gender group) and counts as a pair interaction. Virus sets a rule shown for the next 3 turns.
-11. **Heat (v5)**: new queues are sorted by WHAT heat (+ WHERE heat) with random jitter (initial order only); the heat
+10. **Surprises (v6)**: at Start the server fixes `count = round(total × share%)` (min 1 when share > 0) and picks one
+   random finished-turn slot per equal stretch of turns 1 … total-1 (`state.surpriseAt`): never before the first
+   question, never two in a row. When a slot is reached it picks a type among the enabled surprise items for the
+   level (+ `human` items when the game has a Human). A surprise is its own turn (`surprise_done`), consumes no queue
+   question and does not count toward players × 10. Animal Match always calls one PREDATOR ({a}) and one PREY ({b}),
+   shown with player names. Virus sets a rule shown for the next 3 turns.
+11. **Party animals (v6)**: at Start the players are shuffled; on an odd count one becomes the 🧍 Human; the rest
+   split half predators / half prey (gender ignored) with unique pool animals. On about 1 in 3 of the Human's own
+   Truth/Dare picks (`HUMAN_SHARE_DEN` in `lib/game.js`) a Human item is served instead of the queue head: the queue
+   is not consumed or reordered, but the card counts toward players × 10. Chicken-out's hidden rule resolves petted
+   running-animal ids through the room's animal roles (any-prey / any-predator / human / a specific animal).
+12. **Heat (v5)**: new queues are sorted by WHAT heat (+ WHERE heat) with random jitter (initial order only); the heat
    meter shows turns played / total.
 
 ## Security summary
