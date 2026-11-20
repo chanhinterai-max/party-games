@@ -3,11 +3,15 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/components/api';
 import AccountPanel from '@/components/admin/AccountPanel';
-import BankPanel from '@/components/admin/BankPanel';
-import OddsPanel from '@/components/admin/OddsPanel';
-import DrinksEditor from '@/components/DrinksEditor';
-import SurpriseEditor from '@/components/SurpriseEditor';
-import SurpriseRatePanel from '@/components/admin/SurpriseRatePanel';
+import dynamic from 'next/dynamic';
+
+// v9: the heavy admin panels load on demand (after the account panel) → faster first paint of /admin
+const Lazy = () => <section className="panel" aria-busy="true" style={{ minHeight: 80 }} />;
+const BankPanel = dynamic(() => import('@/components/admin/BankPanel'), { ssr: false, loading: Lazy });
+const OddsPanel = dynamic(() => import('@/components/admin/OddsPanel'), { ssr: false, loading: Lazy });
+const DrinksEditor = dynamic(() => import('@/components/DrinksEditor'), { ssr: false, loading: Lazy });
+const SurpriseEditor = dynamic(() => import('@/components/SurpriseEditor'), { ssr: false, loading: Lazy });
+const SurpriseRatePanel = dynamic(() => import('@/components/admin/SurpriseRatePanel'), { ssr: false, loading: Lazy });
 
 export default function Admin() {
   const [me, setMe] = useState(undefined);

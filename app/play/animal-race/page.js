@@ -1,15 +1,23 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { api } from '@/components/api';
 import PlayerRows from '@/components/party/PlayerRows';
 import useNoSelect from '@/components/party/useNoSelect';
 import AnimalList from '@/components/party/AnimalList';
 import { STORE_PLAYERS, MAX, blank, save, loadPlayers, checkPlayers } from '@/components/party/store';
-import RaceBoard from '@/components/race/RaceBoard';
-import RaceResults from '@/components/race/RaceResults';
-import Confetti from '@/components/play/Confetti';
 import { makeHeats, needsFinal } from '@/lib/race/heats';
+
+// v9: the heavy race code (board + engine + map maths) and the results/confetti load on demand, and are
+// prefetched while players look at the meet screen → small first load, no wait when the race starts.
+const loadBoard = () => import('@/components/race/RaceBoard');
+const RaceBoard = dynamic(loadBoard, { ssr: false, loading: () => <div className="race-board" data-race-board data-stage="loading" /> });
+const loadResults = () => import('@/components/race/RaceResults');
+const loadConfetti = () => import('@/components/play/Confetti');
+const RaceResults = dynamic(loadResults, { ssr: false });
+const Confetti = dynamic(loadConfetti, { ssr: false });
+const loadMaps = () => import('@/lib/race/layoutClient');
 
 // ANIMAL RACE page: setup → meet the animals → heats → final → champion. One server call (start), then the
 // whole game runs on this phone.
@@ -28,7 +36,8 @@ export default function AnimalRace() {
   const [missing, setMissing] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [game, setGame] = useState(null);   // { players, genders, animals, wild }
+  const [game, setGame] = useState(null);   // { players, genders, animals }
+  const [planId, setPlanId] = useState(0);  // new map slots for every new plan (rematch)
   const [plan, setPlan] = useState(null);   // { heats: [[names]], results: [], final: null|{...} }
   const [phase, setPhase] = useState('setup'); // setup | meet | race | results | champion
   const [cur, setCur] = useState(0);        // index of the race being run (heats..., then final)
@@ -42,6 +51,7 @@ export default function AnimalRace() {
     const c = checkPlayers(players);
     if (c.error) { setError(c.error); setMissing(c.missing || []); return; }
     setBusy(true);
+    loadBoard(); loadResults(); loadConfetti(); loadMaps(); // fetch the race code while the server deals the animals
     try {
       const d = await api('/api/race/start', { method: 'POST', body: { players: c.filled } });
       save(STORE_PLAYERS, c.filled); setPlayers(c.filled);
@@ -51,7 +61,7 @@ export default function AnimalRace() {
   function newPlan(d) {
     const heats = makeHeats(d.players, d.animals, 4);
     setPlan({ heats, results: [], hasFinal: needsFinal(heats) });
-    setCur(0);
+    setCur(0); setPlanId((x) => x + 1);
   }
   // the races: each heat, then (if more than one heat) the final with the heat winners
   const races = plan ? [...plan.heats, ...(plan.hasFinal ? [plan.results.length >= plan.heats.length ? plan.results.slice(0, plan.heats.length).map((r) => r.winner) : null] : [])] : [];
@@ -64,8 +74,26 @@ export default function AnimalRace() {
   }
   function next() {
     if (isFinal(cur)) { setPhase('champion'); window.scrollTo(0, 0); return; }
+    window.__nextPressAt = performance.now(); // instant-next-heat measurement (press → first board frame)
     setCur(cur + 1); setPhase('race');
   }
+  // Build every upcoming race map in a Web Worker while the players look at the meet / results screens.
+  // Maps are queued in race order, so the next heat is always first. Same slot key the board asks for.
+  const slotOf = (i) => `${planId}:${i}`;
+  useEffect(() => {
+    if (!plan || (phase !== 'meet' && phase !== 'results')) return undefined;
+    let live = true;
+    const from = phase === 'meet' ? 0 : cur + 1;
+    const sizes = [...plan.heats.map((h) => h.length), ...(plan.hasFinal ? [plan.heats.length] : [])];
+    const id = setTimeout(() => {
+      loadBoard(); loadResults(); loadConfetti(); // prefetch the code too → no network during or after a race
+      loadMaps().then(({ requestLayout, boardSize }) => {
+        if (!live) return; const { w, h } = boardSize();
+        for (let i = from; i < sizes.length; i++) requestLayout(slotOf(i), w, h, sizes[i], mode);
+      });
+    }, 50);
+    return () => { live = false; clearTimeout(id); };
+  }, [phase, plan?.heats, cur, mode, planId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (phase === 'setup' || !game) {
     return (
@@ -83,7 +111,7 @@ export default function AnimalRace() {
           <button type="button" className={`mode-btn ${mode === 'adult' ? 'on' : ''}`} data-mode-pick="adult" aria-pressed={mode === 'adult'} onClick={() => pickMode('adult')}>🌙⛈️ Adult</button>
         </div>
         <div className="race-rules" aria-label="How to play">
-          <span>👆 Tap = run</span><span>✋ Stop = 🌳 / 💤</span><span>🔭❓ = freeze!</span><span>💥 🐯×🐑</span><span>💕 = 🐣</span><span>🍺 Last drinks</span>
+          <span>👆 Tap = run</span><span>✋ Stop = 🌿 hide</span><span>🤠🔫 shoots movers</span><span>❤️ 2-3 shots</span><span>💥 🐯×🐑</span><span>💕 = 🐣 shield</span><span>🍺 Last drinks</span>
           {mode === 'adult' && <><span>🌙 🌧️ 💨</span><span>⚡ = ✋</span><span>💫 Too fast</span></>}
         </div>
         <div className="error" role="alert">{error}</div>
@@ -121,7 +149,7 @@ export default function AnimalRace() {
 
   if (phase === 'race') {
     const names = races[cur];
-    return <RaceBoard key={`race-${cur}-${plan.results.length}`} racers={racersOf(names)} wild={game.wild} label={labelOf(cur)} onDone={onDone} mode={mode} />;
+    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} />;
   }
 
   const res = plan.results[cur];

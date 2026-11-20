@@ -1,14 +1,16 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { RACE, modeCfg } from '@/lib/race/config';
-import { layout, trackPoint } from '@/lib/race/geometry';
-import { createRace, step, tap, rank, isMoving, weatherAt } from '@/lib/race/engine';
+import { trackPoint } from '@/lib/race/geometry';
+import { createRace, step, tap, rank, isMoving, weatherAt, babyPos } from '@/lib/race/engine';
+import { requestLayout, boardSize } from '@/lib/race/layoutClient';
 
-// ANIMAL RACE BOARD — ONE canvas for everything that moves (racers, wild animals + vision cones, trees, hearts,
-// rain, night, lightning) on top of a static background canvas drawn once. One requestAnimationFrame loop, no React
-// renders and no server calls during a race. DOM is used only for the 1-4 tap buttons (native pointerdown,
-// multi-touch) and the countdown/finish labels.
-const PEN_BADGE = { eaten: ['💥', '👻'], feast: ['😋', '💤'], caught: ['😱', '😵'], distracted: ['🥰', '💕'], clash: ['💥', '😵'] };
+// ANIMAL RACE BOARD — ONE canvas for everything that moves (racers, hunters + spotlights, lasers, tracers, health
+// bars, babies, trees, hearts, rain, night, lightning) on top of a static background canvas drawn once. One
+// requestAnimationFrame loop, no React renders and no server calls during a race. DOM is used only for the 1-4 tap
+// buttons (native pointerdown, multi-touch) and a few labels (countdown, FREEZE!, hunter banner, finish).
+// The map is built in a Web Worker ahead of time (see layoutClient.js) → the next heat appears instantly.
+const PEN_BADGE = { shot: ['💥', '😵'], touched: ['🤠', '😵'], clash: ['💥', '😵'] };
 const PAUSE_BADGE = { trip: '💫', zap: '⚡', slide: '💦' };
 const ROLE_COLOR = { predator: '#ff6a5b', prey: '#4fd18b', human: '#ffc24d' };
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
@@ -25,29 +27,31 @@ function spriteCache(dpr) {
     return c;
   };
 }
+// haptics: navigator.vibrate where it exists (Android); iOS Safari has none → silently nothing
+function vibrate(p) { try { if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(p); } catch { /* ignore */ } }
 
-export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal', rng }) {
-  const boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null);
+export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng, slot = 'x' }) {
+  const boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null), freezeRef = useRef(null), bannerRef = useRef(null);
   const btnRefs = useRef([]);
   const [lay, setLay] = useState(null);
   const [stage, setStage] = useState('ready'); // ready | countdown(race) | finish
   const cfgRef = useRef(modeCfg(mode));
 
-  // 1) measure, build the random map (off the first paint), lock the page
+  // 1) lock the page, get the (usually already built) map for this heat
   useEffect(() => {
-    const b = boardRef.current;
+    const b = boardRef.current; let live = true;
     const block = (e) => e.preventDefault();
     b.addEventListener('touchmove', block, { passive: false });
     b.addEventListener('contextmenu', block);
     b.addEventListener('gesturestart', block);
     document.documentElement.classList.add('race-lock');
-    const id = setTimeout(() => {
-      const t0 = performance.now();
-      const l = layout(b.clientWidth, b.clientHeight, racers.length, cfgRef.current, rng || Math.random);
-      window.__layoutMs = Math.round(performance.now() - t0);
+    const t0 = performance.now(); const { w, h } = boardSize();
+    requestLayout(slot, w, h, racers.length, cfgRef.current.mode).then((l) => {
+      if (!live) return;
+      window.__layoutMs = Math.round(performance.now() - t0); // wait for the map (≈0 when precomputed)
       setLay(l);
-    }, 30);
-    return () => { clearTimeout(id); b.removeEventListener('touchmove', block); b.removeEventListener('contextmenu', block); b.removeEventListener('gesturestart', block); document.documentElement.classList.remove('race-lock'); };
+    });
+    return () => { live = false; b.removeEventListener('touchmove', block); b.removeEventListener('contextmenu', block); b.removeEventListener('gesturestart', block); document.documentElement.classList.remove('race-lock'); };
   }, [racers.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 2) static background (ground, tracks, goal, start pads, puddle dips) — drawn once
@@ -77,13 +81,15 @@ export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal'
     gg.addColorStop(0, '#ffb340cc'); gg.addColorStop(1, '#ff2fb300'); g.fillStyle = gg;
     g.beginPath(); g.arc(lay.goal.x, lay.goal.y, RACE.goalRadius + 10, 0, Math.PI * 2); g.fill();
     g.font = `32px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🏁', lay.goal.x, lay.goal.y);
+    // first painted frame of this heat (instant-next-heat measurement: press → this)
+    requestAnimationFrame(() => { window.__heatFrameAt = performance.now(); });
   }, [lay]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 3) the race: countdown + loop (draws trees/hidden animals during the countdown too)
+  // 3) the race: countdown + loop (draws trees during the countdown too)
   useEffect(() => {
     if (!lay || stage !== 'countdown') return undefined;
-    const cfg = cfgRef.current;
-    const race = createRace({ racers, lay, cfg, rng: rng || Math.random, wild });
+    const cfg = cfgRef.current; const H = cfg.haptics;
+    const race = createRace({ racers, lay, cfg, rng: rng || Math.random });
     if (typeof window !== 'undefined') window.__race = race; // read-only test hook
     const board = boardRef.current; const cv = fgRef.current; const dpr = Math.min(cfg.fgDprMax, window.devicePixelRatio || 1); // moving layer: fewer pixels to upload per frame
     cv.width = Math.round(lay.w * dpr); cv.height = Math.round(lay.h * dpr);
@@ -91,18 +97,23 @@ export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal'
     const sp = spriteCache(dpr);
     // night = its own LOW-RES canvas layer (1/2 px), scaled up by the compositor: no full-screen blend in the main canvas
     const night = nightRef.current; const NS = 2; night.width = Math.ceil(lay.w / NS); night.height = Math.ceil(lay.h / NS); const ng = night.getContext('2d'); ng.setTransform(1 / NS, 0, 0, 1 / NS, 0, 0);
-    const sky = skyRef.current, icon = iconRef.current; let skyA = -1, iconTxt = null, nightOn = false;
-    const setSky = (a, col) => { const v = Math.round(a * 100) / 100; if (v !== skyA) { skyA = v; sky.style.opacity = String(v); if (col) sky.style.background = col; } };
+    const sky = skyRef.current, icon = iconRef.current, frz = freezeRef.current, ban = bannerRef.current; let skyA = -1, iconTxt = null, nightOn = false, frzTxt = null, banTxt = null;
+    const setSky = (a, col) => { const v = Math.round(a * 100) / 100; if (v !== skyA) { skyA = v; sky.style.opacity = String(v); } if (col && sky._c !== col) { sky._c = col; sky.style.background = col; } };
     const setIcon = (t) => { if (t !== iconTxt) { iconTxt = t; icon.textContent = t || ''; icon.dataset.show = t ? '1' : '0'; } };
+    const setFreeze = (t, kind) => { if (t !== frzTxt) { frzTxt = t; frz.textContent = t || ''; frz.dataset.show = t ? kind : '0'; } };
+    const setBanner = (t) => { if (t !== banTxt) { banTxt = t; ban.textContent = t || ''; ban.dataset.show = t ? '1' : '0'; } };
     const drops = Array.from({ length: cfg.adult.maxDrops }, (_, i) => ({ x: (i * 53.7) % lay.w, y: (i * 131.3) % lay.h, v: 380 + (i % 7) * 40 }));
     const t0 = performance.now() + cfg.countdownStepMs * 3;
-    const btns = btnRefs.current; let raf = 0, finishedAt = 0, done = false, lastAbs = performance.now();
+    const btns = btnRefs.current; let raf = 0, finishedAt = 0, done = false, lastAbs = performance.now(), lastVib = -1e9, evIdx = 0, cdShown = null, warnedBolt = null, banUntil = 0, banWave = -1, cueBand = -1, cueUntil = 0;
     const dset = (k, v) => { if (board.dataset[k] !== v) board.dataset[k] = v; };
     const onDown = (e) => {
       e.preventDefault();
       const i = Number(e.currentTarget.dataset.tap); const now = performance.now();
-      if (now < t0) return;
-      if (tap(race, i, now - t0)) { e.currentTarget.dataset.hit = '1'; e.currentTarget._hit = now; }
+      if (now < t0) { e.currentTarget.dataset.early = '1'; e.currentTarget._hit = now; return; } // before GO: ignored
+      if (tap(race, i, now - t0)) {
+        e.currentTarget.dataset.hit = '1'; e.currentTarget._hit = now;
+        if (now - lastVib >= H.tapEveryMs) { lastVib = now; vibrate(H.tapMs); } // tiny throttled tick
+      }
     };
     btns.forEach((b) => b?.addEventListener('pointerdown', onDown, { passive: false }));
     const draw = (img, x, y, a = 1, rot = 0) => {
@@ -112,56 +123,101 @@ export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal'
       if (a !== 1) g.globalAlpha = 1;
     };
     const half = cfg.coneHalfDeg * Math.PI / 180;
-    const cones = (now, W, bright, g = fg) => {
-      const range = W.tod === 'night' ? cfg.coneRangeNight : cfg.coneRange;
-      for (const w of race.wilds) {
-        if (w.state === 'home' || w.alpha < 0.05) continue;
-        const hot = w.state === 'question' || w.state === 'approach' || w.state === 'sprint';
-        g.beginPath(); g.moveTo(w.pos.x, w.pos.y); g.arc(w.pos.x, w.pos.y, range * (w.baby ? 0.9 : 1), w.heading - half, w.heading + half); g.closePath();
-        g.fillStyle = hot ? `rgba(255,70,70,${bright ? 0.24 : 0.2})` : `rgba(255,236,140,${(bright ? 0.08 : 0.1) * w.alpha})`; g.fill();
+    const conePath = (gx, h, range) => { gx.beginPath(); gx.moveTo(h.pos.x, h.pos.y); gx.arc(h.pos.x, h.pos.y, range, h.heading - half, h.heading + half); gx.closePath(); };
+    const cones = (now, nightMode) => {
+      const range = nightMode ? cfg.coneRangeNight : cfg.coneRange;
+      for (const h of race.hunters) {
+        if (h.alpha < 0.05) continue;
+        const hot = h.state === 'aim';
+        if (nightMode) { // long glowing spotlight: cut the darkness, then a warm glow
+          ng.globalCompositeOperation = 'destination-out'; conePath(ng, h, range); ng.fillStyle = `rgba(0,0,0,${0.75 * h.alpha})`; ng.fill();
+          ng.globalCompositeOperation = 'source-over'; conePath(ng, h, range); ng.fillStyle = hot ? 'rgba(255,80,80,0.22)' : `rgba(255,236,150,${0.16 * h.alpha})`; ng.fill();
+        } else { conePath(g, h, range); g.fillStyle = hot ? 'rgba(255,70,70,0.22)' : `rgba(255,236,140,${0.12 * h.alpha})`; g.fill(); }
+      }
+    };
+    const drawGun = (h, size) => { // 🔫 held in front, pointing along the heading (emoji points left → flip)
+      const img = sp('🔫', 15); const s = img._px; const c = Math.cos(h.heading);
+      g.save(); g.translate(h.pos.x + c * size * 0.5, h.pos.y + Math.sin(h.heading) * size * 0.5); g.rotate(h.heading); g.scale(-1, c < 0 ? -1 : 1);
+      if (h.alpha !== 1) g.globalAlpha = h.alpha; g.drawImage(img, -s / 2, -s / 2, s, s); g.restore();
+    };
+    const healthBar = (x, y, hp, rot) => {
+      const w = 30, hh = 5; const f = Math.max(0, hp / cfg.health); const yy = rot ? y + 22 : y - 26;
+      g.fillStyle = '#000a'; g.fillRect(x - w / 2 - 1, yy - 1, w + 2, hh + 2);
+      g.fillStyle = f > 0.6 ? '#4fd18b' : f > 0.3 ? '#ffc24d' : '#ff4d4d'; g.fillRect(x - w / 2, yy, w * f, hh);
+    };
+    const handleEvents = (nowAbs) => {
+      for (; evIdx < race.events.length; evIdx++) {
+        const e = race.events[evIdx];
+        if (e.type === 'shot' || e.type === 'baby-shot') vibrate(H.hitMs);
+        else if (e.type === 'caught') vibrate(H.death);
+        else if (e.type === 'finish') vibrate(H.finish);
+        else if (e.type === 'hunter-cue') { banWave = e.wave; banUntil = nowAbs + cfg.hunterArriveCueMs + 700; cueBand = e.wave % cfg.coverBands.length; cueUntil = nowAbs + cfg.hunterArriveCueMs; vibrate(H.go); }
       }
     };
     const frame = (nowAbs) => {
       raf = requestAnimationFrame(frame);
       const now = nowAbs - t0; const dtv = Math.min(50, nowAbs - lastAbs); lastAbs = nowAbs;
-      if (now < 0) { if (cdRef.current) { cdRef.current.textContent = String(Math.ceil(-now / cfg.countdownStepMs)); cdRef.current.dataset.show = '1'; } }
-      else if (now < 500) { cdRef.current.textContent = 'GO!'; cdRef.current.dataset.show = '1'; } else if (cdRef.current.dataset.show !== '0') cdRef.current.dataset.show = '0';
+      // big animal countdown: 🐢 3 · 🐇 2 · 🐆 1 · GO!
+      const cdKey = now < 0 ? Math.ceil(-now / cfg.countdownStepMs) : now < 600 ? 0 : -1;
+      if (cdKey !== cdShown) {
+        cdShown = cdKey; const el = cdRef.current;
+        if (cdKey > 0) { el.innerHTML = `<span class="a">${cfg.countdownAnimals[3 - cdKey] || ''}</span><span class="d">${cdKey}</span>`; el.dataset.show = String(cdKey); }
+        else if (cdKey === 0) { el.innerHTML = '<span class="d go">GO!</span>'; el.dataset.show = 'go'; vibrate(H.go); }
+        else el.dataset.show = '0';
+      }
       if (now >= 0) step(race, now);
+      handleEvents(nowAbs);
       const W = race.weather ? weatherAt(race, Math.max(0, now)) : { tod: 'day', wx: 'clear' };
       dset('tod', W.tod); dset('wx', W.wx); dset('bolt', W.bolt || '');
       g.clearRect(0, 0, lay.w, lay.h);
       // rain makes the puddles shine
       if (W.wx === 'rain') { g.fillStyle = '#5ab0ff88'; for (const t of lay.lanes) for (const pq of cfg.adult.puddleQs) { const p = trackPoint(t, pq); g.beginPath(); g.ellipse(p.x, p.y, RACE.trackHalf, RACE.trackHalf * 0.65, Math.atan2(p.ty, p.tx), 0, Math.PI * 2); g.fill(); } }
-      if (W.tod !== 'night') cones(now, W, false);
-      // wild animals (under the tree tops when they are home)
-      for (const w of race.wilds) {
-        if (w.state === 'home' || w.alpha <= 0) continue;
-        const size = w.baby ? 26 * cfg.babyScale : 26;
-        const bob = w.state === 'sprint' ? Math.sin(nowAbs / 30) * 2 : 0;
-        draw(sp(w.emoji, size), w.pos.x, w.pos.y + bob, w.alpha);
-        draw(sp('🔭', 14), w.pos.x + Math.cos(w.heading) * (size * 0.55), w.pos.y + Math.sin(w.heading) * (size * 0.55), w.alpha, w.heading);
-        const badge = w.state === 'question' ? '❓' : w.state === 'sprint' ? '‼️' : w.state === 'feast' ? '😋' : null;
-        if (badge) draw(sp(badge, 18), w.pos.x + 8, w.pos.y - size * 0.75);
+      if (W.tod !== 'night') cones(now, false);
+      // trees + bushes (the ones a hunter is about to come out of shake)
+      const shake = nowAbs < cueUntil ? Math.sin(nowAbs / 35) * 2.5 : 0;
+      for (const c of lay.covers) draw(sp(c.kind === 'tree' ? '🌳' : '🌿', c.kind === 'tree' ? 40 : 34), c.x + (c.band === cueBand ? shake : 0), c.y);
+      // hunters 🤠 + 🔫, red laser while aiming
+      for (const h of race.hunters) {
+        if (h.alpha <= 0) continue;
+        draw(sp('🤠', 26), h.pos.x, h.pos.y, h.alpha); drawGun(h, 26);
       }
-      for (const c of lay.covers) draw(sp(c.kind === 'tree' ? '🌳' : '🌿', c.kind === 'tree' ? 40 : 34), c.x, c.y);
-      // racers
+      // racers (+ their babies, health bars). Not moving = hidden in a bush (every role).
       race.lanes.forEach((ln, i) => {
         const p = trackPoint(ln.geo, ln.disp); const rot = ln.geo.rot ? Math.PI : 0;
         const moving = now >= 0 && isMoving(race, ln, now);
-        const pen = ln.penalty; const safe = !pen && !moving;
+        const pen = ln.penalty; const hidden = !pen && !moving;
+        for (let k = ln.babies.length - 1; k >= 0; k--) { const bp = babyPos(race, ln, k); draw(sp(ln.role === 'human' ? '👶' : ln.emoji, Math.round(30 * cfg.babyScale)), bp.x, bp.y, hidden ? 0.55 : 1, rot); }
         g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.fillStyle = `${ROLE_COLOR[ln.role] || '#9b5cff'}55`; g.fill();
-        const body = ln.role === 'human' ? (safe ? '🧎' : '🏃') : ln.emoji;
+        const body = ln.role === 'human' ? (hidden ? '🧍' : '🏃') : ln.emoji;
         const bob = moving ? Math.sin(nowAbs / 45 + i) * 2 : 0;
-        draw(sp(body, 30), p.x, p.y + bob, pen ? (pen.stage === 'return' ? 0.4 : 0.6) : safe && ln.role === 'predator' ? 0.75 : 1, rot);
+        draw(sp(body, 30), p.x, p.y + bob, pen ? (pen.stage === 'return' ? 0.4 : 0.6) : 1, rot);
+        if (hidden) draw(sp('🌿', 42), p.x, p.y - 2); // hiding in a bush
         let badge = null;
         if (pen) badge = pen.stage === 'action' ? PEN_BADGE[pen.kind]?.[0] : pen.stage === 'rest' ? PEN_BADGE[pen.kind]?.[1] : null;
         else if (ln.pause) badge = PAUSE_BADGE[ln.pause.kind];
-        else if (safe && ln.role === 'predator') badge = '💤';
-        if (safe && ln.role === 'prey') draw(sp('🌳', 42), p.x, p.y - 4); // hiding in a bush
         if (badge) draw(sp(badge, 20), p.x + (rot ? -10 : 10), p.y + (rot ? 20 : -20), 1, rot);
-        const bt = btns[i]; if (bt?._hit && nowAbs - bt._hit > 90) { bt._hit = 0; bt.dataset.hit = '0'; }
+        else if (!pen && ln.health < cfg.health - 0.5) healthBar(p.x, p.y, ln.health, rot);
+        const bt = btns[i]; if (bt?._hit && nowAbs - bt._hit > 90) { bt._hit = 0; bt.dataset.hit = '0'; bt.dataset.early = '0'; }
       });
+      // red laser sight while a hunter aims (drawn on top of the racers; blinks fast just before the shot)
+      for (const h of race.hunters) {
+        if (h.state !== 'aim' || h.target == null || now < h.aimStart) continue;
+        const p = trackPoint(race.lanes[h.target].geo, race.lanes[h.target].disp);
+        const blink = (now - h.aimStart) > cfg.aimMs * 0.6 ? Math.floor(nowAbs / 60) % 2 : 1;
+        g.strokeStyle = `rgba(255,40,40,${blink ? 0.35 : 0.15})`; g.lineWidth = 6; g.beginPath(); g.moveTo(h.pos.x, h.pos.y); g.lineTo(p.x, p.y); g.stroke();
+        g.strokeStyle = `rgba(255,30,30,${blink ? 0.95 : 0.4})`; g.lineWidth = 2; g.stroke();
+        g.fillStyle = '#ff1e1e'; g.beginPath(); g.arc(p.x, p.y, 4.5, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = '#ff1e1e'; g.lineWidth = 1.5; g.beginPath(); g.arc(p.x, p.y, 10, 0, Math.PI * 2); g.stroke();
+      }
       for (const f of race.fx) {
+        if (f.kind === 'tracer') { // bullet streak + muzzle flash
+          const e = (now - f.t) / f.ms;
+          g.strokeStyle = `rgba(255,230,120,${1 - e})`; g.lineWidth = 2.5; g.beginPath(); g.moveTo(f.x0, f.y0); g.lineTo(f.x0 + (f.x - f.x0) * Math.min(1, e * 2.5), f.y0 + (f.y - f.y0) * Math.min(1, e * 2.5)); g.stroke();
+          g.fillStyle = `rgba(255,200,60,${1 - e})`; g.beginPath(); g.arc(f.x0, f.y0, 10 * (1 - e) + 3, 0, Math.PI * 2); g.fill();
+          draw(sp('💥', 22), f.x, f.y, 1 - e); // impact
+          continue;
+        }
+        if (f.kind === 'poof') { const e = (now - f.t) / cfg.poofMs; draw(sp('💨', 18 + e * 16), f.x, f.y - e * 10, 1 - e); draw(sp('✨', 14), f.x + 8, f.y - 6 - e * 20, 1 - e); continue; }
         const e = (now - f.t) / cfg.heartsMs;
         if (f.kind === 'hearts') for (let k = 0; k < 3; k++) draw(sp('💕', 20), f.x + (k - 1) * 14, f.y - 10 - e * 40 - k * 6, 1 - e);
         else draw(sp('💥', 26 + e * 18), f.x, f.y, 1 - e);
@@ -175,8 +231,8 @@ export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal'
         const hole = (x, y, r) => { const rg = ng.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)'); ng.fillStyle = rg; ng.beginPath(); ng.arc(x, y, r, 0, Math.PI * 2); ng.fill(); };
         race.lanes.forEach((ln) => { const p = trackPoint(ln.geo, ln.disp); hole(p.x, p.y, cfg.adult.lightRadius); });
         hole(lay.goal.x, lay.goal.y, 70);
+        cones(now, true); // long glowing spotlights
         ng.globalCompositeOperation = 'source-over';
-        cones(now, W, true, ng); // glowing night vision cones above the dark
       } else if (nightOn) { nightOn = false; night.dataset.show = '0'; }
       if (W.wx === 'rain') {
         g.strokeStyle = '#9fd0ff66'; g.lineWidth = 1.2; g.beginPath();
@@ -190,11 +246,15 @@ export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal'
         g.stroke();
         if (race.weather.gusts.some((x) => now >= x.cue && now < x.t + cfg.adult.gustMs)) ic = '💨';
       }
-      if (W.bolt === 'warn') { setSky(Math.floor(nowAbs / 90) % 2 ? 0.14 : 0, '#fff'); ic = '⚡'; }
-      else if (W.bolt === 'freeze') { setSky(Math.max(0.08, 0.85 - (now - W.boltT) / 400), '#fffff0'); ic = '✋'; }
-      else setSky(0);
+      // lightning: a BIG ⚡ FREEZE! warning (+ yellow tint + vibration) well before the freeze, then ✋ during it
+      if (W.bolt === 'warn') {
+        if (warnedBolt !== W.boltT) { warnedBolt = W.boltT; vibrate(H.freeze); }
+        setSky(0.16 + (Math.floor(nowAbs / 150) % 2) * 0.1, '#ffe14d'); setFreeze('⚡ FREEZE!', 'warn');
+      } else if (W.bolt === 'freeze') { setSky(Math.max(0.08, 0.85 - (now - W.boltT) / 400), '#fffff0'); setFreeze('✋ FREEZE', 'freeze'); ic = '✋'; }
+      else { setSky(0); setFreeze(null); }
       if (!ic && W.cue) ic = Math.floor(nowAbs / 220) % 2 ? W.cue : null;
       setIcon(ic);
+      setBanner(nowAbs < banUntil && race.phase === 'race' ? (banWave === 0 ? '🤠 A hunter is coming!' : '🤠 Another hunter!') : null);
       if (race.phase === 'done' && !finishedAt) {
         finishedAt = nowAbs; const win = race.lanes[race.winner];
         flashRef.current.textContent = `🏁 ${win.name}!`; flashRef.current.dataset.show = '1';
@@ -211,6 +271,8 @@ export default function RaceBoard({ racers, wild, label, onDone, mode = 'normal'
       <canvas className="race-canvas" ref={fgRef} aria-hidden="true" />
       <canvas className="race-canvas race-night" ref={nightRef} data-show="0" aria-hidden="true" />
       <div className="race-sky" ref={skyRef} aria-hidden="true" />
+      <div className="race-freeze" ref={freezeRef} data-show="0" role="status" />
+      <div className="race-banner" ref={bannerRef} data-show="0" role="status" />
       {!lay && <div className="race-center" style={{ left: '50%', top: '50%' }}><div className="race-label">🌳🌿🌳</div></div>}
       {lay && (
         <>

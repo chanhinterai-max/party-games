@@ -87,7 +87,7 @@ export default function SurpriseEditor() {
           </div>
 
           <div className="label" style={{ marginTop: 16 }}>🐾 Animal pool</div>
-          <p className="count">Each game splits players 1:1 into predators and prey at random (odd count: one Human). Animals are unique per game. Keep at least {data.poolMin} on each side. Tap an animal to edit it; ⚡ sets its Animal Race speed (80–120%, default 100%).</p>
+          <p className="count">Each game splits players 1:1 into predators and prey at random (odd count: one Human). Animals are unique per game. Keep at least {data.poolMin} on each side. Tap an animal to edit it; ⚡ sets how fast it runs as a racer in Animal Race (80–120%, default 100%; the hunters are not animals and are the same for everyone).</p>
           {ROLES.map(([deck, title]) => (
             <div key={deck} data-deck={deck} style={{ marginTop: 8 }}>
               <strong>{title}</strong> <span className="count">({data.pool.filter((d) => d.role === deck).length})</span>

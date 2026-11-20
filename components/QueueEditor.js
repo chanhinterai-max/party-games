@@ -4,10 +4,14 @@ import Link from 'next/link';
 import { api } from './api';
 import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
 import GenderDot, { WithDot } from './GenderDot';
-import CategoryManager from './CategoryManager';
-import DrinksEditor from './DrinksEditor';
-import SurpriseEditor from './SurpriseEditor';
+import dynamic from 'next/dynamic';
 import Results from './Results';
+
+// v9: the editors below the queue load on demand → the host's queue shows first
+const Lazy = () => <section className="panel" aria-busy="true" style={{ minHeight: 80 }} />;
+const CategoryManager = dynamic(() => import('./CategoryManager'), { ssr: false, loading: Lazy });
+const DrinksEditor = dynamic(() => import('./DrinksEditor'), { ssr: false, loading: Lazy });
+const SurpriseEditor = dynamic(() => import('./SurpriseEditor'), { ssr: false, loading: Lazy });
 
 const hexId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('');
 const shortWhat = (t) => t.replaceAll('{who}', 'WHO').replaceAll('{where}', 'WHERE').replaceAll('{partner}', 'PARTNER');

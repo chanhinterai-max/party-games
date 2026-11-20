@@ -15,10 +15,5 @@ export const POST = route(async (req) => {
   const animals = publicAnimals(assignAnimals(names, pool));
   const speedOf = Object.fromEntries(pool.map((a) => [a.id, a.speed ?? 100]));
   for (const a of Object.values(animals)) a.speed = speedOf[a.id] ?? 100; // v8: per-animal speed (80-120 %)
-  const used = new Set(Object.values(animals).map((a) => a.id));
-  const wildOf = (role) => {
-    const free = pool.filter((a) => a.role === role && !used.has(a.id));
-    return (free.length ? free : pool.filter((a) => a.role === role)).map((a) => ({ emoji: a.emoji, speed: a.speed ?? 100 }));
-  };
-  return json({ players: names, genders, animals, wild: { predator: wildOf('predator'), prey: wildOf('prey') } });
+  return json({ players: names, genders, animals }); // v9: no wild animals any more (hunters live on the phone)
 }, { mutation: true });

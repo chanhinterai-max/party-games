@@ -4,11 +4,19 @@ import Link from 'next/link';
 import { api } from '@/components/api';
 import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
 import GenderDot, { WithDot } from '@/components/GenderDot';
+import dynamic from 'next/dynamic';
 import RunningAnimals from '@/components/RunningAnimals';
-import Results from '@/components/Results';
-import Timer from '@/components/play/Timer';
-import Confetti from '@/components/play/Confetti';
-import SurpriseBody from '@/components/play/SurpriseBody';
+
+// v9: in-game pieces load on demand (prefetched as soon as a game starts) → smaller first load of the setup screen
+const loadResults = () => import('@/components/Results');
+const loadTimer = () => import('@/components/play/Timer');
+const loadConfetti = () => import('@/components/play/Confetti');
+const loadSurprise = () => import('@/components/play/SurpriseBody');
+const Results = dynamic(loadResults, { ssr: false });
+const Timer = dynamic(loadTimer, { ssr: false });
+const Confetti = dynamic(loadConfetti, { ssr: false });
+const SurpriseBody = dynamic(loadSurprise, { ssr: false });
+const prefetchGame = () => { loadTimer(); loadSurprise(); loadResults(); loadConfetti(); };
 import AnimalList from '@/components/party/AnimalList';
 import PlayerRows from '@/components/party/PlayerRows';
 import useNoSelect from '@/components/party/useNoSelect';
@@ -142,6 +150,7 @@ export default function TruthOrDare() {
   const roomAnimals = room?.animals && room.status === 'active'
     ? room.players.map((p) => room.animals[p]).filter(Boolean).map((a) => ({ id: a.id, emoji: a.role === 'human' ? '🏃' : a.emoji, happy: a.role === 'human' ? '🧍' : a.emoji, name: a.name }))
     : null;
+  useEffect(() => { if (room?.code) { const id = setTimeout(prefetchGame, 300); return () => clearTimeout(id); } return undefined; }, [room?.code]);
   const animals = <RunningAnimals key={room?.code || 'setup'} animals={roomAnimals} onPettedChange={onPetted} petMs={petMs} />;
 
   if (!room) {

@@ -9,14 +9,15 @@ flowchart LR
   subgraph Browser["📱 Phone / browser"]
     P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔, running party animals, confetti results"]
     A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool"]
-    RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), random equal-length crossing tracks,<br/>trees/bushes + wandering wild animals with vision cones, crashes 💥 / 💕 babies,<br/>Adult day/night + rain/lightning/wind, ALL race logic on the phone (lib/race/*)"]
+    RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)"]
+    WK["🧵 Web Worker lib/race/layout.worker.js<br/>builds every heat's map off the main thread"]
     D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>chicken odds + pet-rule target, surprise share, games, rooms, audit"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
     R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end · idle close · results"]
     R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises"]
     R3["/api/auth/* · /api/setup"]
-    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct,<br/>wild animals {emoji, speed} — no room, no DB writes"]
+    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>— no room, no DB writes"]
     R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, games, rooms, audit"]
     L["lib/: animals (shared roles) · race/* (config, heats, geometry, engine — also bundled to the phone) ·<br/>game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
   end
@@ -25,6 +26,7 @@ flowchart LR
   A -- "httpOnly session cookie" --> R2
   D -- "httpOnly session cookie" --> R4
   RC -- "1 call before the race, none during it" --> R5
+  RC -- "postMessage {w,h,n,mode} → map" --> WK
   P & A & D --> R3
   R1 & R2 & R3 & R4 & R5 --> L
   L -- "parameterized SQL over TLS (DATABASE_URL)" --> DB
@@ -38,7 +40,7 @@ party-games/
 │   ├── layout.js                     Site shell + "Party Animal" title/metadata/brand; Login button (AuthButton.js)
 │   ├── page.js                       Home ("Party Animal"): game tiles, hides games disabled by the admin
 │   ├── globals.css                   Neon/dark mobile-first styles (+ gender dots, chicken modal, animals)
-│   ├── play/truth-or-dare/page.js    PLAYER SCREEN: names + Male/Female, level, room code, OPEN animal list after
+│   ├── play/truth-or-dare/page.js    PLAYER SCREEN (v9: Results / Timer / Confetti / SurpriseBody lazy, prefetched at game start): names + Male/Female, level, room code, OPEN animal list after
 │   │                                 Start (name, gender dot, emoji, animal, Predator/Prey/Human) + collapsible
 │   │                                 🐾 Animals box (native <details>, no server call), heat meter, virus banner,
 │   │                                 3D flip card (Truth cyan / Dare pink / Surprise amber, shimmer while the
@@ -46,17 +48,21 @@ party-games/
 │   │                                 the players' own animals (Human = 🏃), "🧍 Human card" label,
 │   │                                 End game, results + confetti
 │   ├── play/animal-race/page.js      🏁 ANIMAL RACE: setup (shared PlayerRows) → Meet the animals (shared
-│   │                                 AnimalList + heat plan chips) → heats → final → champion; remembers players
+│   │                                 AnimalList + heat plan chips) → heats → final → champion; remembers players.
+│   │                                 v9: RaceBoard / RaceResults / Confetti via next/dynamic, prefetched on "Race!";
+│   │                                 every heat's map requested from the Web Worker during meet/results (instant next heat)
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
 │   ├── room/page.js                  Enter a room code
-│   ├── room/[code]/page.js           ADVANCED: live view + queue editor (components/QueueEditor.js)
+│   ├── room/[code]/page.js           ADVANCED: live view + queue editor (components/QueueEditor.js; its Category /
+│   │                                 Drinks / Surprise editors load lazily)
 │   ├── admin/page.js                 ADMIN PAGE: my account, users (create/enable/reset/delete), question
 │   │                                 bank, chicken odds + hidden rule, drinks, games, live rooms, audit
+│   │                                 (v9: Bank / Odds / Drinks / Surprise / Surprise-rate panels lazy-loaded)
 │   └── api/
 │       ├── games/route.js            GET enabled games (public)
 │       ├── race/start/route.js       ANIMAL RACE START (POST, stateless): game enabled? players valid? → animals
-│       │                             (1:1 predator/prey + Human) + wild emojis from unused pool animals
+│       │                             (1:1 predator/prey + Human) with speed_pct (v9: no wild list)
 │       ├── rooms/route.js            POST create room (players with gender) → code + host token + public animals
 │       ├── rooms/[code]/route.js     GET public room state (no odds / rule ever exposed)
 │       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted:[{id,elapsedMs}]} | surprise_done | level | end
@@ -104,12 +110,16 @@ party-games/
 │   │                                 (user-select none, -webkit-touch-callout none) + blocks contextmenu /
 │   │                                 selectstart / dragstart except inside inputs (player names still editable)
 │   ├── party/AnimalList.js           SHARED "Meet the animals" list (name, gender dot, emoji, Predator/Prey/Human)
-│   ├── race/RaceBoard.js             RACE BOARD (v8 canvas): static background canvas (tracks, trees/bushes,
-│   │                                 puddles, goal; drawn once) + ONE dynamic canvas redrawn per rAF (racers,
-│   │                                 wild animals + 🔭 vision cones, ❓/‼️/😋, 💥/💕 fx, babies, night mask with
-│   │                                 light around racers, rain/wind/lightning, next-weather cue). Emoji sprite
-│   │                                 cache, DPR ≤ 2. DOM only for the rotated tap buttons (native pointerdown,
-│   │                                 4 touches), countdown and finish label. window.__race = test hook
+│   ├── race/RaceBoard.js             RACE BOARD (v9 canvas): static background canvas (tracks, puddles, goal; drawn
+│   │                                 once) + ONE dynamic canvas redrawn per rAF (racers, 🌿 bush over every hidden
+│   │                                 racer, health bars below full, babies trailing their parent + 💨 poof, 🤠🔫
+│   │                                 hunters + spotlight cones (night: long glowing cut-outs on the low-res night
+│   │                                 layer), red laser sight, tracer + muzzle flash + impact, shaking cover before a
+│   │                                 wave, 💥/💕 fx, rain/wind/lightning). DOM only for the tap buttons, big 🐢3 🐇2
+│   │                                 🐆1 GO! countdown (early taps ignored), ⚡ FREEZE! overlay + tint, 🤠 banner,
+│   │                                 finish label. Haptics via navigator.vibrate (tap tick throttled, hit, death,
+│   │                                 finish, GO, freeze; silent on iOS). Gets its map from layoutClient (worker).
+│   │                                 Test hooks: window.__race, __layoutMs, __heatFrameAt
 │   ├── race/RaceResults.js           Heat/final podium (medals, distance bars) + 🍺 Drink! callout for last place
 │   ├── play/Timer.js                 Countdown (Start/Pause + Reset), runs only on the phone
 │   ├── play/Confetti.js              Hand-rolled CSS confetti (36 spans, after first paint, reduced-motion off)
@@ -152,24 +162,34 @@ party-games/
 │   ├── animals.js                    SHARED ANIMAL ROLES: shuffle, 1:1 predator/prey + 🧍 Human on odd counts,
 │   │                                 public animal view (used by game.js and the race start API)
 │   ├── race/config.js                🏁 RACE TUNABLES (ONE file, every number): steps, tap cap, track length
-│   │                                 factor/samples/crossing zone, crash distance + love cooldown, covers per
-│   │                                 track + roam, wild caps (18 wild / 6 babies), vision cone (34°, 112 px day /
-│   │                                 165 px night), ❓/approach/sprint, penalty 900+1000+700 ms, speed clamp
-│   │                                 80–120, and `adult` (90 steps, longer tracks, spells, puddles, lightning,
-│   │                                 gusts, trip threshold, rain-drop cap); modeCfg(mode), clampSpeed()
+│   │                                 factor/samples/crossing zone, crossing offset (crossShift, crossOffsetPx 34,
+│   │                                 layoutBudgetMs), crash distance + love cooldown, covers + roam, HUNTERS
+│   │                                 (first 1.5 s, every 7 s / Adult 6 s, max 2 / Adult 3 per track, cone 30°
+│   │                                 125 px / night 175 px, aim 650 ms, shot gap, touch 34 px), HEALTH (100,
+│   │                                 55 → 34 damage by distance, regen 7/s after 1.8 s), babies (cap 6, 20 px
+│   │                                 gap, poof), countdown animals, haptics patterns, penalty 900+1000+700 ms,
+│   │                                 speed clamp 80–120, `adult` (90 steps, longer tracks, weather, 1.7 s
+│   │                                 lightning warning); modeCfg(mode), clampSpeed()
 │   ├── race/heats.js                 Heat sizes (≤4, balanced) + predator/prey mixing; final when >1 heat
-│   ├── race/geometry.js              RANDOM CURVY TRACKS: one random sine-series curve from the bottom-left
-│   │                                 corner forced through two vias on the centre lines, MIRRORED for the other
-│   │                                 corners → every track exactly the same arc length + curvature and crosses
-│   │                                 its neighbours; 240 equal-arc samples; keep-off grid (tracks, goal,
-│   │                                 buttons, edges); trees/bushes placed per progress band and mirrored onto
-│   │                                 every track with their roam points (fair); landscape = rotated portrait
-│   ├── race/engine.js                Pure race state machine: taps × speed, idle hide, racer crashes (predator/
-│   │                                 prey → both home; same role + opposite gender → 💕 baby, 10 s cooldown;
-│   │                                 else pass; Human passes), wild animals (cover → wander → back, cone-gated
-│   │                                 ❓ → approach → sprint, never on a track), Adult weather timeline (night,
-│   │                                 rain + puddles + lightning freeze, wind gusts, trips), equal penalties,
-│   │                                 ranking + drinkers (client-side; unit-tested in node)
+│   ├── race/geometry.js              RANDOM CURVY TRACKS (v9): TWO sine-series curves A and B of EXACTLY the same
+│   │                                 length (polished on the 240-point resample to ~1e-12 px). A passes crossing
+│   │                                 point P1 shifted 38-66 px off the centre line, B its mirror image → bl = A,
+│   │                                 br = B mirrored, tl = B mirrored, tr = A mirrored: crossings stay exact but
+│   │                                 are reached at different progress (≥ 34 px), and racers at the same progress
+│   │                                 are never within crash distance. Time budget, then a symmetric (v8-style)
+│   │                                 fallback. Keep-off grid; covers + roam points in each track's LOCAL frame
+│   │                                 (same progress / side / distance), mirrored; landscape = rotated portrait
+│   ├── race/layout.worker.js         Web Worker: builds a map (layout()) off the main thread
+│   ├── race/layoutClient.js          Worker client + cache (slot|w×h|n|mode → Promise<map>); main-thread idle
+│   │                                 fallback only if Workers are unavailable
+│   ├── race/engine.js                Pure race state machine: taps × speed, idle = hidden in a bush (every role),
+│   │                                 racer crashes (predator/prey → both home; same role + opposite gender → 💕
+│   │                                 BOTH get a baby, 10 s cooldown; else pass; Human passes), HUNTER waves (same
+│   │                                 times for every track; each hunter hunts only its own track's racer):
+│   │                                 emerge → wander → spot a MOVING racer in the cone → aim → shoot (damage by
+│   │                                 distance; a baby absorbs a shot) → stalk; touch = instant kill; hiding drops
+│   │                                 the target; health + regen; death = start + 2600 ms + full health; Adult
+│   │                                 weather timeline; ranking + drinkers (unit-tested in node)
 │   ├── games.js                      Home-page game slots registry (add new games here; Animal Race = slot 2)
 │   └── http.js                       JSON responses, Origin (CSRF) check, input validation, errors
 ├── next.config.mjs                   Security headers (HSTS, nosniff, frame deny, …)
@@ -203,11 +223,11 @@ party-games/
 | Sessions | `sessions` table: SHA-256 of a random 256-bit token; the raw token is only in an httpOnly cookie `pg_session` (Secure, SameSite=Lax, 12h) |
 | Rooms, queues, history | `rooms` table (`truth_queue`, `dare_queue`, `history`, `state` as JSONB) |
 | Game on/off switches | `games` table (missing row = enabled); `animal-race` uses the same switch |
-| **Animal Race rules + timing (v8)** | `lib/race/config.js` (`RACE`): stepsToGoal 45 (Adult 90), stopMs 350, maxTapsPerSec 14, track length 1.5× straight (Adult 1.85×), crashDist 22, loveCooldownMs 10000, covers 2 per track (Adult 3), maxWild 18, maxBabies 6, cone 34° / 112 px (night 165 px), ❓ 700 / approach 1100 / sprint 400 ms, penalty 900 + 1000 + 700 = 2600 ms for every outcome, `adult.*` weather numbers. Code constants (no admin UI) |
-| **Per-animal race speed (v8)** | `animal_pool.speed_pct` (advanced players + admins, pool editor ⚡); sent by `/api/race/start` for racers and wild animals; distance per tap and wild walking speed × speed/100 |
+| **Animal Race rules + timing (v9)** | `lib/race/config.js` (`RACE`): stepsToGoal 45 (Adult 90), stopMs 350, maxTapsPerSec 14, track length 1.5× straight (Adult 1.85×), crossOffsetPx 34, crashDist 22, loveCooldownMs 10000, covers 2 per track (Adult 3), hunters 1.5 s + every 7 s (Adult 6 s) up to 2 (Adult 3) per track, cone 30° / 125 px (night 175 px), aim 650 ms, touch 34 px, health 100 / damage 55→34 / regen 7 per s after 1.8 s, maxBabies 6, penalty 900 + 1000 + 700 = 2600 ms for every death, haptics, `adult.*` weather numbers. Code constants (no admin UI) |
+| **Per-animal race speed (v8)** | `animal_pool.speed_pct` (advanced players + admins, pool editor ⚡); sent by `/api/race/start` for racers; distance per tap × speed/100 (hunters are the same for everyone) |
 | **Race mode** | localStorage `partygames.race.mode` (normal / adult), picked on the race setup screen |
 | **Animal Race state** | Only in the phone's memory during a race (no room, no DB row, nothing sent to the server); players remembered in localStorage `partygames.tod.players.v3` (shared with Truth or Dare) |
-| Animal Race animals | Same `animal_pool` table; roles dealt by `lib/animals.js`; wild animals = pool animals not dealt to players |
+| Animal Race animals | Same `animal_pool` table; roles dealt by `lib/animals.js` |
 | Audit trail | `audit_log` table (who, action, target, IP, time) |
 | Login rate limiting | `login_throttle` table (per IP) + `users.failed_attempts` / `locked_until` (5 fails → 15 min lock) |
 
@@ -261,23 +281,38 @@ party-games/
 13. **Animal Race (v7)**: setup → `POST /api/race/start` (stateless; 403 when the admin disabled the game) →
    Meet the animals → heats of ≤4 (balanced, predators and prey mixed) → a final for heat winners when there is more
    than one heat. During a race everything runs on the phone: a tap moves the animal one step; with no tap for
-   350 ms prey hide in a bush, predators sleep and the Human crouches. Every lane gets the same number of wild
-   animals at shared times (+ small per-lane jitter); they live in a strip beside the lane that never crosses any
-   lane. If the racer moves: ❓ → slow approach → sprint → contact; stopping first makes the wild animal leave.
-   On contact the racer goes back to the start after the same penalty (eaten / feast + rest / caught / distracted
-   all = 2600 ms). First to the goal wins; the rest rank by distance; last place (ties too) drinks.
+   350 ms EVERY racer (predator, prey, Human) hides in a bush and is safe. Hunters 🤠 arrive at the same
+   moments for every track (cue + shaking bush first), wander near their tree/bush, and shoot only a MOVING
+   racer inside their spotlight (red laser first); 2-3 shots (closer = more damage) or a touch kills: back to the
+   start after 2600 ms with full health. Health regenerates slowly. First to the goal wins; the rest rank by
+   distance; last place (ties too) drinks.
 
-14. **Animal Race (v8)**: every race draws new random curvy tracks (one per racer, from its corner to the shared
-   goal), all exactly the same length and each crossing another. Racers meeting at a crossing (both moving):
-   predator + prey → both go home (2600 ms); same role + opposite gender → 💕 and a baby (a small wild animal of a
-   parent's species, max 6 per race), then that pair has a 10 s cooldown; otherwise (and always for the Human)
-   they pass through. Wild animals live in random trees/bushes placed the same way beside every track; they come
-   out, wander, go back and come out again; each has a visible vision cone and only a MOVING racer it cares about
-   inside the cone triggers ❓ → approach → sprint (stopping or leaving the cone makes it lose interest). Adult
-   mode: longer tracks + a shared weather timeline with a cue icon before every change — night (dark screen,
-   light around racers, longer cones), rain (puddles slide racers back; lightning warning → freeze; tapping in
-   the freeze = same zap for anyone), wind (gusts push everyone back equally); tapping too fast at night or in
-   rain trips the animal. Text in both games can't be selected or long-pressed (useNoSelect).
+14. **Animal Race (v9)**: every race gets new random curvy tracks, all exactly the same length and each crossing
+   another; the crossings are offset so racers tapping at the same pace don't arrive together (crash sim at
+   equal pace: 10.9 → ~0 meetings per race for 2/4 racers). Maps are built in a Web Worker while players look at
+   the meet / results screens, so the next heat appears instantly. Racers meeting at a crossing (both moving):
+   predator + prey → both go home (2600 ms); same role + opposite gender → 💕 and each gets a baby that follows
+   it and absorbs one shot (max 6 per race), 10 s cooldown; otherwise (and always for the Human) they pass.
+   Big 🐢3 🐇2 🐆1 GO! countdown (taps before GO ignored). Adult mode: longer tracks + a shared weather timeline
+   — night (dark screen, light around racers, longer glowing spotlights), rain (puddles slide racers back; a big
+   ⚡ FREEZE! warning with tint + vibration 1.7 s before the freeze; tapping in the freeze = same zap for anyone),
+   wind (gusts push everyone back equally); tapping too fast at night or in rain trips the animal. Text in both
+   games can't be selected or long-pressed (useNoSelect).
+
+### Animal Race (v9) on the phone
+
+```mermaid
+flowchart TB
+  S["Setup: players + mode<br/>Race! → prefetch race code"] -->|"POST /api/race/start (only call)"| M["Meet the animals<br/>heat plan"]
+  M -->|"requestLayout(slot, w×h, n, mode) for every heat"| W["🧵 layout.worker.js<br/>geometry.layout(): curves A/B, offset crossings,<br/>exact equal length, covers + roam (local frame)"]
+  W -->|"map (cached in layoutClient)"| B
+  M -->|"Let's race"| B["RaceBoard: bg canvas + rAF canvas + night layer"]
+  B -->|"▶"| C["🐢3 🐇2 🐆1 GO! (early taps ignored)"]
+  C --> E["engine.step(now) each frame<br/>taps · hide 🌿 · hunter waves · aim/shoot/touch ·<br/>health/regen · babies · crashes · Adult weather"]
+  E -->|"events"| H["haptics (navigator.vibrate) · FREEZE! · 🤠 banner"]
+  E -->|"winner"| R["Results (next heat's map already built)"]
+  R -->|"Heat N ▶ (≈10 ms to first frame)"| B
+```
 
 ## Security summary
 
