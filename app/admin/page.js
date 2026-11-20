@@ -7,11 +7,8 @@ import dynamic from 'next/dynamic';
 
 // v9: the heavy admin panels load on demand (after the account panel) → faster first paint of /admin
 const Lazy = () => <section className="panel" aria-busy="true" style={{ minHeight: 80 }} />;
-const BankPanel = dynamic(() => import('@/components/admin/BankPanel'), { ssr: false, loading: Lazy });
-const OddsPanel = dynamic(() => import('@/components/admin/OddsPanel'), { ssr: false, loading: Lazy });
-const DrinksEditor = dynamic(() => import('@/components/DrinksEditor'), { ssr: false, loading: Lazy });
-const SurpriseEditor = dynamic(() => import('@/components/SurpriseEditor'), { ssr: false, loading: Lazy });
-const SurpriseRatePanel = dynamic(() => import('@/components/admin/SurpriseRatePanel'), { ssr: false, loading: Lazy });
+// v10: all per-game settings live in the "Game settings" section (a tab per game)
+const GameSettings = dynamic(() => import('@/components/admin/GameSettings'), { ssr: false, loading: Lazy });
 
 export default function Admin() {
   const [me, setMe] = useState(undefined);
@@ -124,11 +121,7 @@ export default function Admin() {
         ))}
       </section>
 
-      <BankPanel />
-      <OddsPanel />
-      <section className="panel"><DrinksEditor /></section>
-      <SurpriseRatePanel />
-      <SurpriseEditor />
+      <GameSettings />
 
       <section className="panel" data-section="rooms">
         <h3>Live rooms (active, played in the last hour) <button className="small-btn" onClick={refresh}>↻</button></h3>

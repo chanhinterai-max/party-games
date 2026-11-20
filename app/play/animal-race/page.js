@@ -149,7 +149,7 @@ export default function AnimalRace() {
 
   if (phase === 'race') {
     const names = races[cur];
-    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} />;
+    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} tune={game.tune} />;
   }
 
   const res = plan.results[cur];

@@ -7,21 +7,21 @@ phone's browser, the API runs as Vercel Functions (Node.js), and all state lives
 ```mermaid
 flowchart LR
   subgraph Browser["📱 Phone / browser"]
-    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔, running party animals, confetti results"]
-    A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool"]
-    RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)"]
+    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔 (only after the card is revealed, v10), running party animals, confetti results"]
+    A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool<br/>/room landing (v10): ⚡ race speed sliders + global editors"]
+    RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), sized to the VISIBLE viewport minus safe areas (v10), 🏊 party-pool goal + splash, random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)"]
     WK["🧵 Web Worker lib/race/layout.worker.js<br/>builds every heat's map off the main thread"]
-    D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>chicken odds + pet-rule target, surprise share, games, rooms, audit"]
+    D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>games, rooms, audit,<br/>🎮 Game settings tabs (v10): ToD odds/pet rule/surprise share/drinks/cards/bank ·<br/>Race tunables + speed sliders"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
     R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end · idle close · results"]
     R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises"]
     R3["/api/auth/* · /api/setup"]
-    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>— no room, no DB writes"]
-    R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, games, rooms, audit"]
-    L["lib/: animals (shared roles) · race/* (config, heats, geometry, engine — also bundled to the phone) ·<br/>game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
+    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>+ admin race tunables (v10) — no room, no DB writes"]
+    R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, race-settings (v10), games, rooms, audit"]
+    L["lib/: animals (shared roles) · race/* (config, tunables, heats, geometry, engine — also bundled to the phone) ·<br/>game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
   end
-  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_pool (predator/prey, speed_pct) · human_items<br/>user_categories · settings (drinks, odds, pet, surprise, seed_v5, seed_v6)")]
+  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_pool (predator/prey, speed_pct) · human_items<br/>user_categories · settings (drinks, odds, pet, surprise, race, seed_v5, seed_v6)")]
   P -- "JSON + x-room-token" --> R1
   A -- "httpOnly session cookie" --> R2
   D -- "httpOnly session cookie" --> R4
@@ -53,7 +53,8 @@ party-games/
 │   │                                 every heat's map requested from the Web Worker during meet/results (instant next heat)
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
-│   ├── room/page.js                  Enter a room code
+│   ├── room/page.js                  Enter a room code; v10: advanced users land here → ⚡ race speed sliders +
+│   │                                 global surprise/pool editor (lazy, signed-in advanced/admin only)
 │   ├── room/[code]/page.js           ADVANCED: live view + queue editor (components/QueueEditor.js; its Category /
 │   │                                 Drinks / Surprise editors load lazily)
 │   ├── admin/page.js                 ADMIN PAGE: my account, users (create/enable/reset/delete), question
@@ -61,6 +62,7 @@ party-games/
 │   │                                 (v9: Bank / Odds / Drinks / Surprise / Surprise-rate panels lazy-loaded)
 │   └── api/
 │       ├── games/route.js            GET enabled games (public)
+│       ├── admin/race-settings/route.js  v10 ADMIN: GET/PUT Animal Race tunables (validated; overrides only)
 │       ├── race/start/route.js       ANIMAL RACE START (POST, stateless): game enabled? players valid? → animals
 │       │                             (1:1 predator/prey + Human) with speed_pct (v9: no wild list)
 │       ├── rooms/route.js            POST create room (players with gender) → code + host token + public animals
@@ -99,6 +101,8 @@ party-games/
 │   ├── RunningAnimals.js             CSS-animated animals (in a game: the players' animals, up to 16 lanes; setup:
 │   │                                 generic babies); tap = petted 20 s (reduced-motion aware); they run
 │   │                                 BEHIND the UI (z-index -1) so they never block a button but stay tappable
+│   ├── RaceSpeedEditor.js            v10: ⚡ per-animal race speed range sliders (80–120 %, value shown, debounced
+│   │                                 global save; server clamps). Used on /room, in SurpriseEditor, admin Race tab
 │   ├── SurpriseEditor.js             Surprise cards (type/level/text/on-off/timer), 🧍 Human tab (surprise/truth/
 │   │                                 dare) + predator/prey animal pool
 │   │                                 (advanced room view + admin page; loads only when opened);
@@ -120,6 +124,9 @@ party-games/
 │   │                                 finish label. Haptics via navigator.vibrate (tap tick throttled, hit, death,
 │   │                                 finish, GO, freeze; silent on iOS). Gets its map from layoutClient (worker).
 │   │                                 Test hooks: window.__race, __layoutMs, __heatFrameAt
+│   │                                 v10: 🏊 PARTY POOL goal drawn once in the bg canvas (deck, water, floats) + 1
+│   │                                 ripple ring/frame; winner hops in with a splash. Admin tunables via `tune` prop.
+│   │                                 Re-maps on visualViewport resize before ▶; button size from lay.bR
 │   ├── race/RaceResults.js           Heat/final podium (medals, distance bars) + 🍺 Drink! callout for last place
 │   ├── play/Timer.js                 Countdown (Start/Pause + Reset), runs only on the phone
 │   ├── play/Confetti.js              Hand-rolled CSS confetti (36 spans, after first paint, reduced-motion off)
@@ -129,6 +136,9 @@ party-games/
 │   ├── admin/AccountPanel.js         Change own username / password
 │   ├── admin/BankPanel.js            Manage WHO / WHAT (+ heat 1-3, timer seconds) / WHERE (+ heat) bank
 │   ├── admin/SurpriseRatePanel.js    Surprise cards as a share of total questions (admin only)
+│   ├── admin/GameSettings.js         v10: "🎮 Game settings" — a tab per game (ToD: odds + pet rule, surprise share,
+│   │                                 drinks, surprise cards, bank · Race: tunables + speeds); only the open tab loads
+│   ├── admin/RaceSettingsPanel.js    v10: race tunables form (save / reset to defaults)
 │   ├── admin/OddsPanel.js            Chicken odds + hidden rule (pet-rule target select)
 │   └── api.js                        fetch helper
 ├── lib/                              ── server-side logic
@@ -161,6 +171,8 @@ party-games/
 │   │                                 one-time `seed_v5` / `seed_v6` (inserts only missing rows; never wipes edits)
 │   ├── animals.js                    SHARED ANIMAL ROLES: shuffle, 1:1 predator/prey + 🧍 Human on odd counts,
 │   │                                 public animal view (used by game.js and the race start API)
+│   ├── race/tunables.js              v10: the admin-tunable race numbers (defaults = config.js), validate / clean /
+│   │                                 applyTunables(cfg, tune) — shared by server + phone
 │   ├── race/config.js                🏁 RACE TUNABLES (ONE file, every number): steps, tap cap, track length
 │   │                                 factor/samples/crossing zone, crossing offset (crossShift, crossOffsetPx 34,
 │   │                                 layoutBudgetMs), crash distance + love cooldown, covers + roam, HUNTERS
@@ -182,6 +194,8 @@ party-games/
 │   ├── race/layout.worker.js         Web Worker: builds a map (layout()) off the main thread
 │   ├── race/layoutClient.js          Worker client + cache (slot|w×h|n|mode → Promise<map>); main-thread idle
 │   │                                 fallback only if Workers are unavailable
+│   │                                 v10: boardSize() measures an invisible .race-board probe (visible viewport via
+│   │                                 --vvh / 100dvh minus env(safe-area-inset-*)); syncViewport() sets --vvh
 │   ├── race/engine.js                Pure race state machine: taps × speed, idle = hidden in a bush (every role),
 │   │                                 racer crashes (predator/prey → both home; same role + opposite gender → 💕
 │   │                                 BOTH get a baby, 10 s cooldown; else pass; Human passes), HUNTER waves (same
@@ -223,8 +237,8 @@ party-games/
 | Sessions | `sessions` table: SHA-256 of a random 256-bit token; the raw token is only in an httpOnly cookie `pg_session` (Secure, SameSite=Lax, 12h) |
 | Rooms, queues, history | `rooms` table (`truth_queue`, `dare_queue`, `history`, `state` as JSONB) |
 | Game on/off switches | `games` table (missing row = enabled); `animal-race` uses the same switch |
-| **Animal Race rules + timing (v9)** | `lib/race/config.js` (`RACE`): stepsToGoal 45 (Adult 90), stopMs 350, maxTapsPerSec 14, track length 1.5× straight (Adult 1.85×), crossOffsetPx 34, crashDist 22, loveCooldownMs 10000, covers 2 per track (Adult 3), hunters 1.5 s + every 7 s (Adult 6 s) up to 2 (Adult 3) per track, cone 30° / 125 px (night 175 px), aim 650 ms, touch 34 px, health 100 / damage 55→34 / regen 7 per s after 1.8 s, maxBabies 6, penalty 900 + 1000 + 700 = 2600 ms for every death, haptics, `adult.*` weather numbers. Code constants (no admin UI) |
-| **Per-animal race speed (v8)** | `animal_pool.speed_pct` (advanced players + admins, pool editor ⚡); sent by `/api/race/start` for racers; distance per tap × speed/100 (hunters are the same for everyone) |
+| **Animal Race rules + timing (v9)** | `lib/race/config.js` (`RACE`): stepsToGoal 45 (Adult 90), stopMs 350, maxTapsPerSec 14, track length 1.5× straight (Adult 1.85×), crossOffsetPx 34, crashDist 22, loveCooldownMs 10000, covers 2 per track (Adult 3), hunters 1.5 s + every 7 s (Adult 6 s) up to 2 (Adult 3) per track, cone 30° / 125 px (night 175 px), aim 650 ms, touch 34 px, health 100 / damage 55→34 / regen 7 per s after 1.8 s, maxBabies 6, penalty 900 + 1000 + 700 = 2600 ms for every death, haptics, `adult.*` weather numbers. Code constants; v10: hunter wave timing (first + every, Normal/Adult), shot damage close/far and the three penalty phases are admin-tunable (`settings.race` = overrides only, `lib/race/tunables.js`, defaults identical) |
+| **Per-animal race speed (v8)** | `animal_pool.speed_pct` (advanced players + admins: v10 range sliders 80–120 % in `components/RaceSpeedEditor.js` on /room, the room pool editor and Admin → Game settings → Animal Race; clamped server-side); sent by `/api/race/start` for racers; distance per tap × speed/100 (hunters are the same for everyone) |
 | **Race mode** | localStorage `partygames.race.mode` (normal / adult), picked on the race setup screen |
 | **Animal Race state** | Only in the phone's memory during a race (no room, no DB row, nothing sent to the server); players remembered in localStorage `partygames.tod.players.v3` (shared with Truth or Dare) |
 | Animal Race animals | Same `animal_pool` table; roles dealt by `lib/animals.js` |
@@ -304,13 +318,14 @@ party-games/
 ```mermaid
 flowchart TB
   S["Setup: players + mode<br/>Race! → prefetch race code"] -->|"POST /api/race/start (only call)"| M["Meet the animals<br/>heat plan"]
-  M -->|"requestLayout(slot, w×h, n, mode) for every heat"| W["🧵 layout.worker.js<br/>geometry.layout(): curves A/B, offset crossings,<br/>exact equal length, covers + roam (local frame)"]
+  M -->|"requestLayout(slot, w×h, n, mode) for every heat<br/>w×h = boardSize(): visible viewport − safe areas (v10)"| W["🧵 layout.worker.js<br/>geometry.layout(): curves A/B, offset crossings,<br/>exact equal length, covers + roam (local frame)<br/>short screens: tight passes (buttons 92/84 px)"]
   W -->|"map (cached in layoutClient)"| B
   M -->|"Let's race"| B["RaceBoard: bg canvas + rAF canvas + night layer"]
   B -->|"▶"| C["🐢3 🐇2 🐆1 GO! (early taps ignored)"]
   C --> E["engine.step(now) each frame<br/>taps · hide 🌿 · hunter waves · aim/shoot/touch ·<br/>health/regen · babies · crashes · Adult weather"]
   E -->|"events"| H["haptics (navigator.vibrate) · FREEZE! · 🤠 banner"]
-  E -->|"winner"| R["Results (next heat's map already built)"]
+  B -.->|"visualViewport resize before ▶ → new map (v10)"| W
+  E -->|"winner hops into the 🏊 pool + splash"| R["Results (next heat's map already built)"]
   R -->|"Heat N ▶ (≈10 ms to first frame)"| B
 ```
 

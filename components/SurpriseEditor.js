@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { api } from './api';
 import { LEVELS } from '@/lib/content';
+import RaceSpeedEditor from './RaceSpeedEditor';
 
 // GLOBAL surprise-card content, the predator/prey animal pool and Human items (advanced users + admins). Loads only when opened.
 const TYPES = [
@@ -15,7 +16,7 @@ const TYPES = [
 const HUMAN_KINDS = [['surprise', '✨ Surprise'], ['truth', '🤫 Truth'], ['dare', '🔥 Dare']];
 const ROLES = [['predator', '🦷 Predators'], ['prey', '🌿 Prey']];
 
-export default function SurpriseEditor() {
+export default function SurpriseEditor({ speeds = true }) {
   const [data, setData] = useState(null);
   const [type, setType] = useState('match');
   const [level, setLevel] = useState('adult');
@@ -87,7 +88,7 @@ export default function SurpriseEditor() {
           </div>
 
           <div className="label" style={{ marginTop: 16 }}>🐾 Animal pool</div>
-          <p className="count">Each game splits players 1:1 into predators and prey at random (odd count: one Human). Animals are unique per game. Keep at least {data.poolMin} on each side. Tap an animal to edit it; ⚡ sets how fast it runs as a racer in Animal Race (80–120%, default 100%; the hunters are not animals and are the same for everyone).</p>
+          <p className="count">Each game splits players 1:1 into predators and prey at random (odd count: one Human). Animals are unique per game. Keep at least {data.poolMin} on each side. Tap an animal to rename it. Race speeds have their own sliders below (⚡).</p>
           {ROLES.map(([deck, title]) => (
             <div key={deck} data-deck={deck} style={{ marginTop: 8 }}>
               <strong>{title}</strong> <span className="count">({data.pool.filter((d) => d.role === deck).length})</span>
@@ -98,16 +99,11 @@ export default function SurpriseEditor() {
                       <>
                         <input className="input" style={{ minHeight: 30, width: 44 }} name="deck-edit-emoji" value={edit.emoji} onChange={(e) => setEdit({ ...edit, emoji: e.target.value })} />
                         <input className="input" style={{ minHeight: 30, width: 96 }} name="deck-edit-name" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-                        <label className="speed-pick" title="Animal Race speed">⚡
-                          <select className="input" style={{ minHeight: 30, width: 74 }} name="deck-edit-speed" value={edit.speed} onChange={(e) => setEdit({ ...edit, speed: Number(e.target.value) })}>
-                            {[80, 85, 90, 95, 100, 105, 110, 115, 120].map((v) => <option key={v} value={v}>{v}%</option>)}
-                          </select>
-                        </label>
-                        <button className="small-btn good" data-act="deck-save" onClick={() => run(() => api(`/api/surprises/${d.id}`, { method: 'PATCH', body: { name: edit.name, emoji: edit.emoji, speed: edit.speed } }), 'Saved ✓')}>✓</button>
+                        <button className="small-btn good" data-act="deck-save" onClick={() => run(() => api(`/api/surprises/${d.id}`, { method: 'PATCH', body: { name: edit.name, emoji: edit.emoji } }), 'Saved ✓')}>✓</button>
                       </>
                     ) : (
                       <>
-                        <span onClick={() => setEdit({ id: d.id, name: d.name, emoji: d.emoji, speed: d.speed ?? 100 })}>{d.emoji} {d.name}{(d.speed ?? 100) !== 100 && <small className="speed-tag" data-speed={d.speed}> ⚡{d.speed}%</small>}</span>
+                        <span onClick={() => setEdit({ id: d.id, name: d.name, emoji: d.emoji })}>{d.emoji} {d.name}{(d.speed ?? 100) !== 100 && <small className="speed-tag" data-speed={d.speed}> ⚡{d.speed}%</small>}</span>
                         <button className="x" aria-label={`Delete ${d.name}`} onClick={() => run(() => api(`/api/surprises/${d.id}`, { method: 'DELETE' }), 'Deleted ✓')}>✕</button>
                       </>
                     )}
@@ -121,6 +117,7 @@ export default function SurpriseEditor() {
               </div>
             </div>
           ))}
+          {speeds ? <RaceSpeedEditor pool={data.pool} /> : <p className="count">⚡ Race speeds: see the Animal Race speeds panel.</p>}
         </>
       )}
     </details>

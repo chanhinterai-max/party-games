@@ -151,6 +151,15 @@ export default function TruthOrDare() {
     ? room.players.map((p) => room.animals[p]).filter(Boolean).map((a) => ({ id: a.id, emoji: a.role === 'human' ? '🏃' : a.emoji, happy: a.role === 'human' ? '🧍' : a.emoji, name: a.name }))
     : null;
   useEffect(() => { if (room?.code) { const id = setTimeout(prefetchGame, 300); return () => clearTimeout(id); } return undefined; }, [room?.code]);
+  // v10: 'Chicken out' appears only once the question is REVEALED: the drawn card is shown and the 0.45 s flip has
+  // finished (never before or during the flip / shimmer). readyCard = the card id whose flip has completed.
+  const [readyCard, setReadyCard] = useState(null);
+  const shownCard = pending !== 'truth' && pending !== 'dare' && room?.card ? (room.card.itemId ?? room.card.text) : null;
+  useEffect(() => {
+    if (shownCard == null) { setReadyCard(null); return undefined; }
+    const id = setTimeout(() => setReadyCard(shownCard), reduced ? 0 : 480);
+    return () => clearTimeout(id);
+  }, [shownCard, reduced]);
   const animals = <RunningAnimals key={room?.code || 'setup'} animals={roomAnimals} onPettedChange={onPetted} petMs={petMs} />;
 
   if (!room) {
@@ -299,7 +308,9 @@ export default function TruthOrDare() {
         <div className="stack">
           <button className={`btn btn-primary ${pending === 'next' ? 'is-pending' : ''}`} data-act="next" disabled={busy}
             onClick={async () => { await act({ action: 'done' }, 'next'); window.scrollTo(0, 0); }}>Done ✓ · Next player</button>
-          <button className={`btn btn-chicken ${pending === 'chicken' ? 'is-pending' : ''}`} data-act="chicken" disabled={busy} onClick={chickenOut}>Chicken out 🐔</button>
+          {(pending === 'chicken' || (!drawing && readyCard != null && readyCard === shownCard)) && (
+            <button className={`btn btn-chicken chicken-in ${pending === 'chicken' ? 'is-pending' : ''}`} data-act="chicken" disabled={busy} onClick={chickenOut}>Chicken out 🐔</button>
+          )}
         </div>
       ) : showSurpriseButtons ? (
         <div className="stack">
@@ -311,9 +322,6 @@ export default function TruthOrDare() {
           <div className="choice">
             <button className={`btn btn-truth ${pending === 'truth' ? 'is-pending' : ''}`} data-act="truth" disabled={busy} onClick={() => act({ action: 'draw', type: 'truth' }, 'truth')}>🤫<span>Truth</span><small>spill a secret</small></button>
             <button className={`btn btn-dare ${pending === 'dare' ? 'is-pending' : ''}`} data-act="dare" disabled={busy} onClick={() => act({ action: 'draw', type: 'dare' }, 'dare')}>🔥<span>Dare</span><small>do the thing</small></button>
-          </div>
-          <div className="section">
-            <button className={`btn btn-chicken ${pending === 'chicken' ? 'is-pending' : ''}`} data-act="chicken-pass" disabled={busy} onClick={chickenOut}>Chicken out 🐔</button>
           </div>
         </>
       )}

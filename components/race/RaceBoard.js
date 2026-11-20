@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { RACE, modeCfg } from '@/lib/race/config';
+import { applyTunables } from '@/lib/race/tunables';
 import { trackPoint } from '@/lib/race/geometry';
 import { createRace, step, tap, rank, isMoving, weatherAt, babyPos } from '@/lib/race/engine';
-import { requestLayout, boardSize } from '@/lib/race/layoutClient';
+import { requestLayout, boardSize, syncViewport } from '@/lib/race/layoutClient';
 
 // ANIMAL RACE BOARD — ONE canvas for everything that moves (racers, hunters + spotlights, lasers, tracers, health
 // bars, babies, trees, hearts, rain, night, lightning) on top of a static background canvas drawn once. One
@@ -27,15 +28,35 @@ function spriteCache(dpr) {
     return c;
   };
 }
+// v10 PARTY POOL goal — drawn ONCE into the static background canvas (no per-frame cost): party glow, tiled deck,
+// water with a highlight, lane ropes, floats + a drink on the deck. Per frame there is only one faint ripple ring.
+function drawPool(g, x, y, R) {
+  const glow = g.createRadialGradient(x, y, R * 0.6, x, y, R + 22);
+  glow.addColorStop(0, '#ff4fd866'); glow.addColorStop(1, '#ff4fd800');
+  g.fillStyle = glow; g.beginPath(); g.arc(x, y, R + 22, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#f3e7cc'; g.beginPath(); g.arc(x, y, R + 7, 0, Math.PI * 2); g.fill(); // deck
+  g.strokeStyle = '#d9c9a4'; g.lineWidth = 1; for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8; g.beginPath(); g.moveTo(x + Math.cos(a) * R, y + Math.sin(a) * R); g.lineTo(x + Math.cos(a) * (R + 7), y + Math.sin(a) * (R + 7)); g.stroke(); }
+  const wg = g.createRadialGradient(x - R * 0.3, y - R * 0.3, 2, x, y, R);
+  wg.addColorStop(0, '#9ff3ff'); wg.addColorStop(0.55, '#33c4ef'); wg.addColorStop(1, '#127fc0');
+  g.fillStyle = wg; g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
+  g.save(); g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.clip();
+  g.strokeStyle = '#ffffff55'; g.lineWidth = 2;
+  for (let k = -1; k <= 1; k++) { g.beginPath(); for (let i = 0; i <= 12; i++) { const px = x - R + (i / 12) * 2 * R; const py = y + k * R * 0.45 + Math.sin(i * 1.3 + k) * 2.5; if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.stroke(); }
+  g.restore();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `17px ${EMOJI_FONT}`; g.fillText('🛟', x - R * 0.5, y + R * 0.45); g.fillText('🦩', x + R * 0.48, y - R * 0.42);
+  g.font = `13px ${EMOJI_FONT}`; g.fillText('🍹', x + R + 6, y + R * 0.55); g.fillText('🎉', x - R - 5, y - R * 0.55);
+  g.font = `22px ${EMOJI_FONT}`; g.fillText('🏊', x, y + 2);
+}
 // haptics: navigator.vibrate where it exists (Android); iOS Safari has none → silently nothing
 function vibrate(p) { try { if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(p); } catch { /* ignore */ } }
 
-export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng, slot = 'x' }) {
+export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng, slot = 'x', tune }) {
   const boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null), freezeRef = useRef(null), bannerRef = useRef(null);
   const btnRefs = useRef([]);
   const [lay, setLay] = useState(null);
   const [stage, setStage] = useState('ready'); // ready | countdown(race) | finish
-  const cfgRef = useRef(modeCfg(mode));
+  const cfgRef = useRef(null); if (!cfgRef.current) cfgRef.current = modeCfg(mode, applyTunables(RACE, tune)); // v10: admin overrides
 
   // 1) lock the page, get the (usually already built) map for this heat
   useEffect(() => {
@@ -52,6 +73,24 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
       setLay(l);
     });
     return () => { live = false; b.removeEventListener('touchmove', block); b.removeEventListener('contextmenu', block); b.removeEventListener('gesturestart', block); document.documentElement.classList.remove('race-lock'); };
+  }, [racers.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 1b) v10: the visible viewport changed (browser bars shown/hidden, rotation) BEFORE the race starts → new map for
+  // the new size (worker; usually a few ms… up to ~1 s in Adult, the old board stays up meanwhile). During a race the
+  // map is kept (re-laying out mid-race is impossible); --vvh still follows the viewport.
+  const layRef = useRef(null); layRef.current = lay; const stageRef = useRef(stage); stageRef.current = stage;
+  useEffect(() => {
+    const vv = window.visualViewport; let tm = 0; let live = true;
+    const onResize = () => {
+      syncViewport(); clearTimeout(tm);
+      tm = setTimeout(() => {
+        const l = layRef.current; if (!l || stageRef.current !== 'ready') return;
+        const { w, h } = boardSize(); if (Math.abs(w - l.w) < 4 && Math.abs(h - l.h) < 4) return;
+        requestLayout(`${slot}|vv`, w, h, racers.length, cfgRef.current.mode).then((nl) => { if (live && stageRef.current === 'ready') setLay(nl); });
+      }, 150);
+    };
+    vv?.addEventListener('resize', onResize); window.addEventListener('resize', onResize); window.addEventListener('orientationchange', onResize);
+    return () => { live = false; clearTimeout(tm); vv?.removeEventListener('resize', onResize); window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
   }, [racers.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 2) static background (ground, tracks, goal, start pads, puddle dips) — drawn once
@@ -77,10 +116,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
       if (adult) for (const pq of cfgRef.current.adult.puddleQs) { const p = trackPoint(t, pq); g.beginPath(); g.ellipse(p.x, p.y, RACE.trackHalf - 2, RACE.trackHalf * 0.6, Math.atan2(p.ty, p.tx), 0, Math.PI * 2); g.fillStyle = '#2b3a4a'; g.fill(); }
     });
     for (const c of lay.covers) { g.beginPath(); g.ellipse(c.x + 3, c.y + 8, RACE.coverRadius + 4, RACE.coverRadius * 0.55, 0, 0, Math.PI * 2); g.fillStyle = '#00000044'; g.fill(); }
-    const gg = g.createRadialGradient(lay.goal.x, lay.goal.y, 4, lay.goal.x, lay.goal.y, RACE.goalRadius + 10);
-    gg.addColorStop(0, '#ffb340cc'); gg.addColorStop(1, '#ff2fb300'); g.fillStyle = gg;
-    g.beginPath(); g.arc(lay.goal.x, lay.goal.y, RACE.goalRadius + 10, 0, Math.PI * 2); g.fill();
-    g.font = `32px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🏁', lay.goal.x, lay.goal.y);
+    drawPool(g, lay.goal.x, lay.goal.y, RACE.goalRadius);
     // first painted frame of this heat (instant-next-heat measurement: press → this)
     requestAnimationFrame(() => { window.__heatFrameAt = performance.now(); });
   }, [lay]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -183,6 +219,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
       }
       // racers (+ their babies, health bars). Not moving = hidden in a bush (every role).
       race.lanes.forEach((ln, i) => {
+        if (finishedAt && i === race.winner) return; // the winner is in the pool (drawn below)
         const p = trackPoint(ln.geo, ln.disp); const rot = ln.geo.rot ? Math.PI : 0;
         const moving = now >= 0 && isMoving(race, ln, now);
         const pen = ln.penalty; const hidden = !pen && !moving;
@@ -255,9 +292,25 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
       if (!ic && W.cue) ic = Math.floor(nowAbs / 220) % 2 ? W.cue : null;
       setIcon(ic);
       setBanner(nowAbs < banUntil && race.phase === 'race' ? (banWave === 0 ? '🤠 A hunter is coming!' : '🤠 Another hunter!') : null);
+      // pool ripple (one cheap ring) + the winner's jump & splash
+      { const rp = (nowAbs % 2400) / 2400; g.strokeStyle = `rgba(255,255,255,${0.35 * (1 - rp)})`; g.lineWidth = 1.5; g.beginPath(); g.arc(lay.goal.x, lay.goal.y, 8 + rp * (RACE.goalRadius - 10), 0, Math.PI * 2); g.stroke(); }
+      if (finishedAt) {
+        const e = Math.min(1, (nowAbs - finishedAt) / 420); const ln = race.lanes[race.winner]; const p0 = trackPoint(ln.geo, 1);
+        if (e < 1) { // hop in an arc from the pool edge to the middle
+          const x = p0.x + (lay.goal.x - p0.x) * e, y = p0.y + (lay.goal.y - p0.y) * e - Math.sin(e * Math.PI) * 26;
+          draw(sp(ln.role === 'human' ? '🏃' : ln.emoji, 30), x, y, 1, e * Math.PI * 2);
+        }
+        const s = (nowAbs - finishedAt - 380) / 900;
+        if (s > 0 && s < 1) {
+          g.strokeStyle = `rgba(255,255,255,${0.9 * (1 - s)})`; g.lineWidth = 3;
+          for (let k = 0; k < 2; k++) { g.beginPath(); g.ellipse(lay.goal.x, lay.goal.y, 6 + (s * 46) / (k + 1), (4 + (s * 30)) / (k + 1), 0, 0, Math.PI * 2); g.stroke(); }
+          for (let k = 0; k < 6; k++) { const a = -Math.PI / 2 + (k - 2.5) * 0.45; const r = 10 + s * 38; draw(sp('💦', 16), lay.goal.x + Math.cos(a) * r, lay.goal.y + Math.sin(a) * r * 0.8 + s * s * 30, 1 - s); }
+        }
+        if (s > 0) draw(sp(ln.role === 'human' ? '🏊' : ln.emoji, 26), lay.goal.x, lay.goal.y + 4 + Math.sin(nowAbs / 160) * 2, Math.min(1, s * 3)); // bobbing in the pool
+      }
       if (race.phase === 'done' && !finishedAt) {
         finishedAt = nowAbs; const win = race.lanes[race.winner];
-        flashRef.current.textContent = `🏁 ${win.name}!`; flashRef.current.dataset.show = '1';
+        flashRef.current.textContent = `🏊 ${win.name}!`; flashRef.current.dataset.show = '1';
       }
       if (finishedAt && !done && nowAbs - finishedAt > 1400) { done = true; cancelAnimationFrame(raf); onDone(rank(race), race); }
     };
@@ -280,7 +333,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
             const g = lay.lanes[i];
             return (
               <button key={`b-${i}`} type="button" className={`race-btn role-${r.role}`} data-tap={i} data-hit="0" ref={(el) => { btnRefs.current[i] = el; }}
-                style={{ left: g.btn.x, top: g.btn.y, width: RACE.buttonSize, height: RACE.buttonSize, transform: `translate(-50%,-50%) rotate(${g.rot}deg)` }}>
+                style={{ left: g.btn.x, top: g.btn.y, width: lay.bR ? lay.bR * 2 : RACE.buttonSize, height: lay.bR ? lay.bR * 2 : RACE.buttonSize, transform: `translate(-50%,-50%) rotate(${g.rot}deg)` }}>
                 <span className="e">{r.role === 'human' ? '🧍' : r.emoji}</span><span className="n">{r.name}</span>
               </button>
             );
