@@ -11,6 +11,7 @@ import Confetti from '@/components/play/Confetti';
 import SurpriseBody from '@/components/play/SurpriseBody';
 import AnimalList from '@/components/party/AnimalList';
 import PlayerRows from '@/components/party/PlayerRows';
+import useNoSelect from '@/components/party/useNoSelect';
 import { STORE_PLAYERS, MIN, MAX, blank, load, save, loadPlayers } from '@/components/party/store';
 
 const STORE_LEVEL = 'partygames.tod.level';
@@ -18,6 +19,7 @@ const STORE_ROOM = 'partygames.tod.room';
 const Shimmer = ({ w = '80%', h = 22 }) => <span className="shimmer" style={{ width: w, height: h }} aria-hidden="true" />;
 
 export default function TruthOrDare() {
+  useNoSelect();
   const [players, setPlayers] = useState([blank(), blank()]);
   const [level, setLevel] = useState('children');
   const [error, setError] = useState('');

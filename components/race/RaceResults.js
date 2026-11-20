@@ -11,7 +11,7 @@ export default function RaceResults({ result, animals, genders, title }) {
       <ol className="podium">
         {result.order.map((o) => {
           const a = animals[o.name];
-          const pct = o.steps === Infinity || o.steps === null ? 100 : Math.round((o.steps / RACE.stepsToGoal) * 100);
+          const pct = o.pct ?? (o.steps === Infinity || o.steps === null ? 100 : Math.round((o.steps / RACE.stepsToGoal) * 100));
           return (
             <li key={o.name} className={`podium-row place-${o.place}`} data-place={o.place} data-podium={o.name}>
               <span className="medal">{MEDAL[o.place - 1] || o.place}</span>

@@ -12,7 +12,7 @@ export const PATCH = route(async (req, { params }) => {
   const k = kindOf(id);
   if (k === 'pool') {
     const animal = await poolUpdate(id, body);
-    await audit(user, 'pool_update', id, { name: animal.name }, req);
+    await audit(user, 'pool_update', id, { name: animal.name, speed: animal.speed }, req);
     return json({ animal });
   }
   if (k === 'human') {

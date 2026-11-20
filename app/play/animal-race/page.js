@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/components/api';
 import PlayerRows from '@/components/party/PlayerRows';
+import useNoSelect from '@/components/party/useNoSelect';
 import AnimalList from '@/components/party/AnimalList';
 import { STORE_PLAYERS, MAX, blank, save, loadPlayers, checkPlayers } from '@/components/party/store';
 import RaceBoard from '@/components/race/RaceBoard';
@@ -12,6 +13,7 @@ import { makeHeats, needsFinal } from '@/lib/race/heats';
 
 // ANIMAL RACE page: setup → meet the animals → heats → final → champion. One server call (start), then the
 // whole game runs on this phone.
+const MODE_KEY = 'partygames.race.mode';
 const Top = ({ right }) => (
   <div className="topbar" style={{ marginTop: 8 }}>
     <Link className="icon-btn" href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>← Games</Link>
@@ -21,6 +23,7 @@ const Top = ({ right }) => (
 );
 
 export default function AnimalRace() {
+  useNoSelect();
   const [players, setPlayers] = useState([blank(), blank()]);
   const [missing, setMissing] = useState([]);
   const [error, setError] = useState('');
@@ -29,8 +32,10 @@ export default function AnimalRace() {
   const [plan, setPlan] = useState(null);   // { heats: [[names]], results: [], final: null|{...} }
   const [phase, setPhase] = useState('setup'); // setup | meet | race | results | champion
   const [cur, setCur] = useState(0);        // index of the race being run (heats..., then final)
+  const [mode, setMode] = useState('normal'); // normal | adult
 
-  useEffect(() => { const p = loadPlayers(); if (p) setPlayers(p); }, []);
+  useEffect(() => { const p = loadPlayers(); if (p) setPlayers(p); try { if (localStorage.getItem(MODE_KEY) === 'adult') setMode('adult'); } catch {} }, []);
+  const pickMode = (m) => { setMode(m); try { localStorage.setItem(MODE_KEY, m); } catch {} };
 
   async function start() {
     setError(''); setMissing([]);
@@ -73,8 +78,13 @@ export default function AnimalRace() {
           </div>
           <PlayerRows players={players} setPlayers={setPlayers} missing={missing} />
         </div>
+        <div className="mode-pick" role="group" aria-label="Mode">
+          <button type="button" className={`mode-btn ${mode === 'normal' ? 'on' : ''}`} data-mode-pick="normal" aria-pressed={mode === 'normal'} onClick={() => pickMode('normal')}>🌞 Normal</button>
+          <button type="button" className={`mode-btn ${mode === 'adult' ? 'on' : ''}`} data-mode-pick="adult" aria-pressed={mode === 'adult'} onClick={() => pickMode('adult')}>🌙⛈️ Adult</button>
+        </div>
         <div className="race-rules" aria-label="How to play">
-          <span>👆 Tap = run</span><span>✋ Stop = 🌳 / 💤</span><span>❓ = freeze!</span><span>🍺 Last drinks</span>
+          <span>👆 Tap = run</span><span>✋ Stop = 🌳 / 💤</span><span>🔭❓ = freeze!</span><span>💥 🐯×🐑</span><span>💕 = 🐣</span><span>🍺 Last drinks</span>
+          {mode === 'adult' && <><span>🌙 🌧️ 💨</span><span>⚡ = ✋</span><span>💫 Too fast</span></>}
         </div>
         <div className="error" role="alert">{error}</div>
         <div className="section">
@@ -84,7 +94,7 @@ export default function AnimalRace() {
     );
   }
 
-  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾' }));
+  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100 }));
 
   if (phase === 'meet') {
     const cnt = (r) => Object.values(game.animals).filter((a) => a.role === r).length;
@@ -111,7 +121,7 @@ export default function AnimalRace() {
 
   if (phase === 'race') {
     const names = races[cur];
-    return <RaceBoard key={`race-${cur}-${plan.results.length}`} racers={racersOf(names)} wild={game.wild} label={labelOf(cur)} onDone={onDone} />;
+    return <RaceBoard key={`race-${cur}-${plan.results.length}`} racers={racersOf(names)} wild={game.wild} label={labelOf(cur)} onDone={onDone} mode={mode} />;
   }
 
   const res = plan.results[cur];
