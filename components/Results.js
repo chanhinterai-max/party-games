@@ -58,7 +58,7 @@ export default function Results({ room }) {
         <>
           <div className="label" style={{ marginTop: 18 }}>🐾 Party animals</div>
           <div className="scores" data-animals style={{ marginTop: 0 }}>
-            {room.players.map((p) => r.animals[p] && <span key={p} data-animal-for={p}><GenderDot gender={g[p]} />{p} · {r.animals[p].emoji} {r.animals[p].name}{r.animals[p].role && r.animals[p].role !== 'animal' ? ` (${r.animals[p].role})` : ''}</span>)}
+            {room.players.map((p) => r.animals[p] && <span key={p} data-animal-for={p}><GenderDot gender={g[p]} />{p} · {r.animals[p].emoji} {r.animals[p].name}{['predator', 'prey'].includes(r.animals[p].role) ? ` (${r.animals[p].role})` : ''}</span>)}
           </div>
         </>
       )}
