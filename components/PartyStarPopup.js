@@ -21,8 +21,8 @@ export default function PartyStarPopup({ open, onClose, data }) {
       <div className="modal panel star-modal" role="dialog" aria-modal="true" aria-labelledby="star-pop-h">
         <h3 id="star-pop-h">⭐ {data.label} for this session</h3>
         <p className="count">Type part of a player’s name (not case-sensitive). In rooms you create from this page until you
-          log out, the first player whose name contains it becomes the {data.label}. Everyone sees it announced when the game
-          starts, with these perks, and a ⭐ next to their name.</p>
+          log out, the first player whose name contains it is <b>blessed</b> (a quiet luck boost all game) and is the first
+          ⭐ {data.label}. After each game a 🎡 wheel picks the next {data.label} (everyone sees the ⭐ badge and perk list).</p>
         <label className="field">Name contains
           <input className="input" name="star-match" maxLength={20} autoComplete="off" value={match} onChange={(e) => setMatch(e.target.value)} placeholder="e.g. mia" />
         </label>

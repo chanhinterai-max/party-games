@@ -5,7 +5,7 @@ import { listPool } from '@/lib/surprises';
 import { assignAnimals, publicAnimals } from '@/lib/animals';
 import { getRaceTune } from '@/lib/settings';
 import { getUser, audit, throttle } from '@/lib/auth';
-import { resolveRoomStar, publicStar } from '@/lib/partystar';
+import { resolveRoomStar, publicStar, loadPrevRoom, hasQuiet } from '@/lib/partystar';
 
 // ANIMAL RACE start: ONE request before the first race. Validates the players, checks the admin game switch, and
 // deals Party Animal roles + unique pool animals (same rules as Truth or Dare). Everything after this runs on the
@@ -16,13 +16,18 @@ export const POST = route(async (req) => {
   if (!(await isGameEnabled('animal-race'))) throw new HttpError(403, 'This game is currently disabled');
   const { names, genders } = validatePlayers(body.players);
   const [pool, tune] = await Promise.all([listPool(), getRaceTune()]);
-  const raw = assignAnimals(names, pool);
   const user = body.host === true ? await getUser(req) : null;
-  const { creator, star } = await resolveRoomStar(user, body.host === true, 'animal-race', names, genders);
-  if (star?.perks?.raceNoHumanOn && raw[star.player]?.role === 'human') { // swap the Human role with a random other player
-    const others = names.filter((n) => n !== star.player);
-    const o = others[Math.floor(Math.random() * others.length)];
-    [raw[star.player], raw[o]] = [raw[o], raw[star.player]];
+  // v12 "Again" in a hosted room: same group → keep the animals, the wheel winner becomes the Party Star
+  const prevRow = user && body.prev ? await loadPrevRoom(user, body.prev) : null;
+  const same = prevRow?.game === 'animal-race' && prevRow.players.length === names.length && names.every((n) => prevRow.players.includes(n)) && prevRow.state?.animals;
+  const raw = same ? prevRow.state.animals : assignAnimals(names, pool);
+  const { creator, star } = await resolveRoomStar(user, body.host === true, 'animal-race', names, genders, prevRow);
+  if (star?.perks?.raceNoHumanOn) { // never the Human: star AND blessed (swap the Human role with a random other player)
+    const hum = names.find((n) => raw[n]?.role === 'human');
+    if (hum && hasQuiet(star, hum)) {
+      const others = names.filter((n) => !hasQuiet(star, n));
+      if (others.length) { const o = others[Math.floor(Math.random() * others.length)]; [raw[hum], raw[o]] = [raw[o], raw[hum]]; }
+    }
   }
   const animals = publicAnimals(raw);
   const speedOf = Object.fromEntries(pool.map((a) => [a.id, a.speed ?? 100]));
@@ -34,5 +39,8 @@ export const POST = route(async (req) => {
     await audit(user, 'room_create', room.code, { game: 'animal-race', star: star ? star.player : null }, req);
   }
   // v9: no wild animals (hunters live on the phone); v10: tune = admin race overrides ({} = defaults)
-  return json({ players: names, genders, animals, tune, star: publicStar(star), ...(room ? { room: { code: room.code, token: room.token } } : {}) });
+  // v12: per-racer race perks (star + blessed): strides ×, gentler hunters/weather, hunter looks away
+  const P = star?.perks; const boost = {};
+  if (P) for (const n of names) if (hasQuiet(star, n)) boost[n] = { tap: P.raceTapOn ? P.raceTapMult : 1, gentle: P.raceGentleOn ? P.raceGentlePct / 100 : 0, luck: P.luckOn ? P.luckPct / 100 : 0 };
+  return json({ players: names, genders, animals, tune, star: publicStar(star), boost, ...(room ? { room: { code: room.code, token: room.token } } : {}) });
 }, { mutation: true });

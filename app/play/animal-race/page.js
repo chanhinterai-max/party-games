@@ -8,6 +8,7 @@ import useNoSelect from '@/components/party/useNoSelect';
 import AnimalList from '@/components/party/AnimalList';
 import StarAnnounce from '@/components/party/StarAnnounce';
 import StarBadge from '@/components/party/StarBadge';
+import StarWheel from '@/components/party/StarWheel';
 import { STORE_PLAYERS, MAX, blank, save, loadPlayers, checkPlayers } from '@/components/party/store';
 import { makeHeats, needsFinal } from '@/lib/race/heats';
 
@@ -45,26 +46,27 @@ export default function AnimalRace() {
   const [cur, setCur] = useState(0);        // index of the race being run (heats..., then final)
   const [mode, setMode] = useState('normal'); // normal | adult
   const [host, setHost] = useState(false);    // v11: opened from an advanced user's Rooms page (?host=1)
+  const [wheel, setWheel] = useState(null);   // v12 🎡 next-star wheel (hosted Party Star room, at the champion)
 
   useEffect(() => { if (new URLSearchParams(window.location.search).get('host') === '1') setHost(true); const p = loadPlayers(); if (p) setPlayers(p); try { if (localStorage.getItem(MODE_KEY) === 'adult') setMode('adult'); } catch {} }, []);
   const pickMode = (m) => { setMode(m); try { localStorage.setItem(MODE_KEY, m); } catch {} };
 
-  async function start() {
-    setError(''); setMissing([]);
+  async function start(prev = null) {
+    setError(''); setMissing([]); setWheel(null);
     const c = checkPlayers(players);
     if (c.error) { setError(c.error); setMissing(c.missing || []); return; }
     setBusy(true);
     loadBoard(); loadResults(); loadConfetti(); loadMaps(); // fetch the race code while the server deals the animals
     try {
-      const d = await api('/api/race/start', { method: 'POST', body: { players: c.filled, ...(host ? { host: true } : {}) } });
+      const d = await api('/api/race/start', { method: 'POST', body: { players: c.filled, ...(host ? { host: true } : {}), ...(prev ? { prev } : {}) } });
       save(STORE_PLAYERS, c.filled); setPlayers(c.filled);
       setGame(d); newPlan(d); setPhase('meet'); window.scrollTo(0, 0);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   function newPlan(d) {
     const heats = makeHeats(d.players, d.animals, 4);
-    // v11 ⭐ Party Star "crossing partner": with raceCrossPct % an opposite-sex racer of the SAME role joins the
-    // star's heat (swapped in) and the board puts the two on crossing tracks. Shown as "⭐ …'s pick 💕".
+    // ⭐ Party Star "crossing partner" (visible star only): with raceCrossPct % an opposite-sex racer of the SAME role
+    // joins the star's heat (swapped in) and the board puts the two on crossing tracks (v12: no on-screen label).
     let pair = null; const S = d.star;
     if (S?.perks?.raceCrossOn && Math.random() * 100 < S.perks.raceCrossPct) {
       const role = d.animals[S.player]?.role; const g = d.genders?.[S.player];
@@ -94,8 +96,14 @@ export default function AnimalRace() {
   function next() {
     if (isFinal(cur)) {
       setPhase('champion'); window.scrollTo(0, 0);
-      // v11: a hosted race room is ended (fire-and-forget) when the champion is crowned
-      if (game.room && !game.room.ended) { game.room.ended = true; api(`/api/rooms/${game.room.code}/action`, { method: 'POST', body: { action: 'end' }, headers: { 'x-room-token': game.room.token } }).catch(() => {}); }
+      // v11/v12: a hosted race room is ended when the champion is crowned; with a Party Star the server spins the
+      // next-star wheel from the podium (final order) and every phone animates it
+      if (game.room && !game.room.ended) {
+        game.room.ended = true;
+        const order = plan.results[cur].order.map((o) => o.name);
+        api(`/api/rooms/${game.room.code}/action`, { method: 'POST', body: { action: 'race_end', order }, headers: { 'x-room-token': game.room.token } })
+          .then((d) => { if (d.room?.wheel) setWheel(d.room.wheel); }).catch(() => {});
+      }
       return;
     }
     window.__nextPressAt = performance.now(); // instant-next-heat measurement (press → first board frame)
@@ -130,7 +138,7 @@ export default function AnimalRace() {
           </div>
           <PlayerRows players={players} setPlayers={setPlayers} missing={missing} />
         </div>
-        {host && <p className="host-note" data-host-note>🎛️ New race room under your login (from your Rooms page). Any ⭐ special player you set for this session is announced to everyone at the start.</p>}
+        {host && <p className="host-note" data-host-note>🎛️ New race room under your login (from your Rooms page). Your session’s ⭐ player is shown to everyone with a badge and a perk list.</p>}
         <div className="mode-pick" role="group" aria-label="Mode">
           <button type="button" className={`mode-btn ${mode === 'normal' ? 'on' : ''}`} data-mode-pick="normal" aria-pressed={mode === 'normal'} onClick={() => pickMode('normal')}>🌞 Normal</button>
           <button type="button" className={`mode-btn ${mode === 'adult' ? 'on' : ''}`} data-mode-pick="adult" aria-pressed={mode === 'adult'} onClick={() => pickMode('adult')}>🌙⛈️ Adult</button>
@@ -141,13 +149,13 @@ export default function AnimalRace() {
         </div>
         <div className="error" role="alert">{error}</div>
         <div className="section">
-          <button className="btn btn-primary" data-act="start" disabled={busy} onClick={start}>{busy ? 'Starting…' : 'Race! 🏁'}</button>
+          <button className="btn btn-primary" data-act="start" disabled={busy} onClick={() => start()}>{busy ? 'Starting…' : 'Race! 🏁'}</button>
         </div>
       </>
     );
   }
 
-  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100, star: game.star?.player === n }));
+  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100, star: game.star?.player === n, boost: game.boost?.[n] || null }));
 
   if (phase === 'meet') {
     const cnt = (r) => Object.values(game.animals).filter((a) => a.role === r).length;
@@ -157,9 +165,7 @@ export default function AnimalRace() {
         <div className="reveal-stage" data-reveal-stage>
           <h2 className="reveal-title">🐾 Meet the party animals!</h2>
           <p className="count" style={{ textAlign: 'center' }}>{cnt('predator')} predators · {cnt('prey')} prey{cnt('human') ? ' · 1 Human' : ''}</p>
-          <StarAnnounce star={game.star} />
           <AnimalList players={game.players} animals={game.animals} genders={game.genders} star={game.star} />
-          {plan.pair && game.star && <p className="star-strip" data-star-tag>⭐ {game.star.label}’s pick 💕 {plan.pair[1]} races in the same heat on a crossing track</p>}
           {game.room && <p className="count" style={{ textAlign: 'center' }} data-race-room={game.room.code}>Room {game.room.code} · saved under your login</p>}
           <div className="heat-plan" data-heat-plan={plan.heats.map((h) => h.length).join('+')}>
             {plan.heats.map((h, i) => (
@@ -170,6 +176,7 @@ export default function AnimalRace() {
             {plan.hasFinal && <div className="heat-chip"><b>👑 Final</b> 🥇 × {plan.heats.length}</div>}
           </div>
           <button className="btn btn-primary" data-act="begin" onClick={() => setPhase('race')}>Let’s race 🏁</button>
+          <StarAnnounce star={game.star} />
         </div>
       </>
     );
@@ -177,7 +184,7 @@ export default function AnimalRace() {
 
   if (phase === 'race') {
     const names = races[cur];
-    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} tune={game.tune} star={game.star} pair={plan.pair && names.includes(plan.pair[0]) && names.includes(plan.pair[1]) ? plan.pair : null} />;
+    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} tune={game.tune} pair={plan.pair && names.includes(plan.pair[0]) && names.includes(plan.pair[1]) ? plan.pair : null} />;
   }
 
   const res = plan.results[cur];
@@ -190,6 +197,7 @@ export default function AnimalRace() {
           <button className="btn btn-primary" data-act="next-race" onClick={next}>
             {isFinal(cur) ? '👑 Champion' : isFinal(cur + 1) ? '👑 Final ▶' : `Heat ${cur + 2} ▶`}</button>
         </div>
+        <StarAnnounce star={game.star} />
       </>
     );
   }
@@ -210,9 +218,11 @@ export default function AnimalRace() {
         <div className="drink-names">{res.drinkers.map((n) => <b key={n}>{n}</b>)}</div>
         <div className="drink-word">Drink!</div>
       </div>
+      {wheel && <StarWheel wheel={wheel} label={game.star?.label} />}
       <Confetti />
       <div className="section row">
-        <button className="btn btn-primary" data-act="rematch" onClick={() => { newPlan(game); setPhase('meet'); }}>Again 🔁</button>
+        <button className="btn btn-primary" data-act="rematch" disabled={busy}
+          onClick={() => { if (game.room) start({ code: game.room.code, token: game.room.token }); else { newPlan(game); setPhase('meet'); } }}>Again 🔁</button>
         <button className="btn btn-ghost" data-act="new-players" onClick={() => { setGame(null); setPlan(null); setPhase('setup'); }}>Players</button>
       </div>
     </>

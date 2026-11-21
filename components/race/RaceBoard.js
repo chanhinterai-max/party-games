@@ -64,17 +64,16 @@ function arrange(racers, lay, pair) {
   return { list: out, crossed: true };
 }
 
-export default function RaceBoard({ racers: given, label, onDone, mode = 'normal', rng, slot = 'x', tune, star = null, pair = null }) {
-  const boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null), freezeRef = useRef(null), bannerRef = useRef(null);
+export default function RaceBoard({ racers: given, label, onDone, mode = 'normal', rng, slot = 'x', tune, pair = null }) {
+  const mapRef = useRef(null), boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null), freezeRef = useRef(null), bannerRef = useRef(null);
   const btnRefs = useRef([]);
   const [lay, setLay] = useState(null);
   const { list: racers, crossed } = useMemo(() => arrange(given, lay, pair), [lay]); // eslint-disable-line react-hooks/exhaustive-deps
   const [stage, setStage] = useState('ready');
   const [remap, setRemap] = useState(false); // v10: a new map for a new visible size is being built (▶ waits) // ready | countdown(race) | finish
   const cfgRef = useRef(null);
-  if (!cfgRef.current) { // v10: admin overrides; v11: ⭐ Party Star perks (only for the racer with star: true)
-    const base = modeCfg(mode, applyTunables(RACE, tune)); const P = star?.perks;
-    cfgRef.current = P ? { ...base, star: { tapMult: P.raceTapOn ? P.raceTapMult : 1, gentle: P.raceGentleOn ? P.raceGentlePct / 100 : 0, luck: P.luckOn ? P.luckPct / 100 : 0 } } : base;
+  if (!cfgRef.current) { // v10: admin overrides; v12: race perks come per racer (racer.boost from /api/race/start)
+    cfgRef.current = modeCfg(mode, applyTunables(RACE, tune));
   }
 
   // 1) lock the page, get the (usually already built) map for this heat
@@ -85,6 +84,7 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
     b.addEventListener('contextmenu', block);
     b.addEventListener('gesturestart', block);
     document.documentElement.classList.add('race-lock');
+    if (window.scrollY) window.scrollTo(0, 0); // v12: measure with the page at the top (Safari bars in their resting state)
     const t0 = performance.now(); const { w, h } = boardSize();
     requestLayout(slot, w, h, racers.length, cfgRef.current.mode).then((l) => {
       if (!live) return;
@@ -98,10 +98,20 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
   // the new size (worker; usually a few ms… up to ~1 s in Adult, the old board stays up meanwhile). During a race the
   // map is kept (re-laying out mid-race is impossible); --vvh still follows the viewport.
   const layRef = useRef(null); layRef.current = lay; const stageRef = useRef(stage); stageRef.current = stage;
+  // v12: FIT — whenever the visible box changes (any stage, incl. mid-race), scale the whole map so every tap button
+  // stays inside it (transform only; hit-testing follows the transform). 1 = no scaling.
+  const fit = () => {
+    const l = layRef.current, el = mapRef.current; if (!l || !el) return;
+    const { w, h } = syncViewport(); const k = Math.min(1, w / l.w, h / l.h);
+    const t = k < 0.999 ? `translate(${Math.round((w - l.w * k) / 2)}px,0) scale(${k.toFixed(4)})` : '';
+    if (el.style.transform !== t) el.style.transform = t;
+    el.dataset.fit = k.toFixed(3);
+  };
+  useEffect(() => { fit(); }, [lay]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const vv = window.visualViewport; let tm = 0; let live = true;
     const onResize = () => {
-      syncViewport(); clearTimeout(tm);
+      fit(); clearTimeout(tm);
       tm = setTimeout(() => {
         const l = layRef.current; if (!l || stageRef.current !== 'ready') return;
         const { w, h } = boardSize(); if (Math.abs(w - l.w) < 4 && Math.abs(h - l.h) < 4) return;
@@ -109,8 +119,8 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
         requestLayout(`${slot}|vv`, w, h, racers.length, cfgRef.current.mode).then((nl) => { if (live && stageRef.current === 'ready') setLay(nl); }).finally(() => { if (live) setRemap(false); });
       }, 150);
     };
-    vv?.addEventListener('resize', onResize); window.addEventListener('resize', onResize); window.addEventListener('orientationchange', onResize);
-    return () => { live = false; clearTimeout(tm); vv?.removeEventListener('resize', onResize); window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
+    vv?.addEventListener('resize', onResize); vv?.addEventListener('scroll', onResize); window.addEventListener('resize', onResize); window.addEventListener('orientationchange', onResize);
+    return () => { live = false; clearTimeout(tm); vv?.removeEventListener('resize', onResize); vv?.removeEventListener('scroll', onResize); window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
   }, [racers.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 2) static background (ground, tracks, goal, start pads, puddle dips) — drawn once
@@ -274,7 +284,6 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
           draw(sp('💥', 22), f.x, f.y, 1 - e); // impact
           continue;
         }
-        if (f.kind === 'star') { const e = (now - f.t) / cfg.heartsMs; draw(sp('⭐', 18 + e * 8), f.x, f.y - 16 - e * 30, 1 - e); continue; } // v11 lucky moment
         if (f.kind === 'poof') { const e = (now - f.t) / cfg.poofMs; draw(sp('💨', 18 + e * 16), f.x, f.y - e * 10, 1 - e); draw(sp('✨', 14), f.x + 8, f.y - 6 - e * 20, 1 - e); continue; }
         const e = (now - f.t) / cfg.heartsMs;
         if (f.kind === 'hearts') for (let k = 0; k < 3; k++) draw(sp('💕', 20), f.x + (k - 1) * 14, f.y - 10 - e * 40 - k * 6, 1 - e);
@@ -340,7 +349,8 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
   }, [lay, stage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="race-board" ref={boardRef} data-race-board data-stage={stage} data-mode={mode}>
+    <div className="race-board" ref={boardRef} data-race-board data-crossed={crossed ? '1' : '0'} data-stage={stage} data-mode={mode}>
+     <div className="race-stage" ref={mapRef} style={lay ? { width: lay.w, height: lay.h } : { width: '100%', height: '100%' }}>
       <canvas className="race-canvas" ref={bgRef} aria-hidden="true" />
       <canvas className="race-canvas" ref={fgRef} aria-hidden="true" />
       <canvas className="race-canvas race-night" ref={nightRef} data-show="0" aria-hidden="true" />
@@ -363,7 +373,6 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
             {stage === 'ready' && (
               <>
                 <div className="race-label">{label}{mode === 'adult' ? ' · 🌙⛈️' : ''}</div>
-                {crossed && star && <div className="race-star-pick" data-star-tag>⭐ {star.label}’s pick 💕 {pair[1]} crosses {pair[0]}</div>}
                 <button type="button" className="race-go" data-act="race-go" disabled={remap} aria-busy={remap} onClick={() => setStage('countdown')}>{remap ? '…' : '▶'}</button>
               </>
             )}
@@ -373,6 +382,7 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
           </div>
         </>
       )}
+     </div>
     </div>
   );
 }

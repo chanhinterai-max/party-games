@@ -7,17 +7,17 @@ phone's browser, the API runs as Vercel Functions (Node.js), and all state lives
 ```mermaid
 flowchart LR
   subgraph Browser["📱 Phone / browser"]
-    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔 (only after the card is revealed, v10), running party animals, confetti results"]
+    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔 (only after the card is revealed, v10), running party animals, confetti results<br/>v12: collapsed ⭐ perk dropdown, 🎡 next-star wheel on results"]
     A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool<br/>/room landing (v10): ⚡ race speed sliders + global editors<br/>v11: ➕ New Truth or Dare / Animal Race room (?host=1) + ⭐ Party Star popup once per login"]
-    RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), sized to the VISIBLE viewport minus safe areas (v10), 🏊 party-pool goal + splash, random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)"]
+    RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), sized to the REAL visible box (v12: min of visualViewport / 100svh / innerHeight − safe areas − 12 px; map scaled to fit if Safari bars appear mid-race), 🏊 party-pool goal + splash, random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)"]
     WK["🧵 Web Worker lib/race/layout.worker.js<br/>builds every heat's map off the main thread"]
     D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>games, rooms, audit,<br/>🎮 Game settings tabs (v10): ToD odds/pet rule/surprise share/drinks/cards/bank ·<br/>Race tunables + speed sliders · v11 ⭐ Star player tab (label + perk defaults)"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
-    R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end · idle close · results"]
+    R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end / race_end (v12 🎡 wheel) · idle close · results"]
     R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises · /api/me/party-star (v11)"]
     R3["/api/auth/* · /api/setup"]
-    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>+ admin race tunables (v10) — no room, no DB writes<br/>v11: host=true + login → race room row (creator tag) + ⭐ star"]
+    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>+ admin race tunables (v10) — no room, no DB writes<br/>v11: host=true + login → race room row (creator tag) + ⭐ star<br/>v12: prev room → same animals + wheel winner as star; per-racer boost (star + blessed)"]
     R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, race-settings (v10), party-star (v11), games, rooms, audit"]
     L["lib/: animals (shared roles) · race/* (config, tunables, heats, geometry, engine — also bundled to the phone) ·<br/>partystar (v11, + partystar-shared for the phone) · game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
   end
@@ -49,12 +49,16 @@ party-games/
 │   │                                 End game, results + confetti
 │   │                                 v11: ?host=1 → host note; ⭐ start announcement, ⭐ badges, ⭐ in score chips,
 │   │                                 "⭐ <label>’s pick 💕" on perk cards / surprise pairs, drink-odds/luck tag on chicken
+│   │                                 v12: per-card star labels removed; collapsed ⭐ dropdown at the bottom (start + play);
+│   │                                 🎡 StarWheel on the results; Play again sends prev {code, token} → wheel winner = star
 │   ├── play/animal-race/page.js      🏁 ANIMAL RACE: setup (shared PlayerRows) → Meet the animals (shared
 │   │                                 AnimalList + heat plan chips) → heats → final → champion; remembers players.
 │   │                                 v9: RaceBoard / RaceResults / Confetti via next/dynamic, prefetched on "Race!";
 │   │                                 every heat's map requested from the Web Worker during meet/results (instant next heat)
 │   │                                 v11: ?host=1 → race room (ended at the champion); ⭐ announcement + badges; crossing
 │   │                                 partner swapped into the star's heat (plan.pair → RaceBoard); ⭐ on results + champion
+│   │                                 v12: champion → race_end {order} → 🎡 wheel; "Again" (hosted) → /api/race/start with prev
+│   │                                 (same animals, new star); racers carry boost (star + blessed); no crossing label
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
 │   ├── room/page.js                  Enter a room code; v10: advanced users land here → ⚡ race speed sliders +
@@ -124,11 +128,12 @@ party-games/
 │   │                                 selectstart / dragstart except inside inputs (player names still editable)
 │   ├── party/AnimalList.js           SHARED "Meet the animals" list (name, gender dot, emoji, Predator/Prey/Human)
 │   ├── party/StarBadge.js            v11 "⭐ <label>" badge (animal lists, race lane/results, champion)
-│   ├── party/StarAnnounce.js         v11 start announcement "⭐ <label>: <name>" + plain perk list (+ compact strip)
+│   ├── party/StarAnnounce.js         v12 COLLAPSED <details> dropdown "⭐ <label>: <name> ▸" → plain perk list (start/play/race screens)
+│   ├── party/StarWheel.js            v12 🎡 next-star wheel: one SVG + one CSS transform (server already picked the winner)
 │   ├── PartyStarPopup.js             v11 once-per-login popup: name match (contains, case-insensitive) + session perks
 │   ├── StarPerksForm.js              v11 shared perk toggles + values (admin card + session popup)
-│   ├── admin/PartyStarPanel.js       v11 Admin → Game settings → ⭐ Star player: label rename + default perks
-│   ├── race/RaceBoard.js             RACE BOARD (v9 canvas; v11 ⭐ lane name, cfg.star perks, crossing pair + "⭐ …’s pick 💕" label, ⭐ luck fx): static background canvas (tracks, puddles, goal; drawn
+│   ├── admin/PartyStarPanel.js       v11 Admin → Game settings → ⭐ Star player: label rename + default perks + v12 🎡 wheel weights
+│   ├── race/RaceBoard.js             RACE BOARD (v9 canvas; ⭐ lane name, crossing pair (no label); v12 per-racer boost, .race-stage map layer scaled to fit the visible box on any viewport change): static background canvas (tracks, puddles, goal; drawn
 │   │                                 once) + ONE dynamic canvas redrawn per rAF (racers, 🌿 bush over every hidden
 │   │                                 racer, health bars below full, babies trailing their parent + 💨 poof, 🤠🔫
 │   │                                 hunters + spotlight cones (night: long glowing cut-outs on the low-res night
@@ -156,9 +161,10 @@ party-games/
 │   ├── admin/OddsPanel.js            Chicken odds + hidden rule (pet-rule target select)
 │   └── api.js                        fetch helper
 ├── lib/                              ── server-side logic
-│   ├── partystar.js                  v11 SERVER: settings `party_star` {label, perks}, session match, resolveRoomStar
+│   ├── partystar.js                  SERVER: settings `party_star` {label, perks, wheel}, session match, resolveRoomStar (v12: blessed + star),
+│   │                                 v12: loadPrevRoom (own room, same session, token), hasQuiet, spinWheel (crypto), publicWheel
 │   │                                 (host + advanced/admin + session match → first matching player), publicStar
-│   ├── partystar-shared.js           v11 SHARED (server + phone): defaults, field ranges, cleanPerks/cleanLabel/cleanMatch,
+│   ├── partystar-shared.js           SHARED (server + phone; v12 PAIR_PERKS, WHEEL_DEFAULTS/FIELDS, cleanWheel, wheelSlices, pickSlice): defaults, field ranges, cleanPerks/cleanLabel/cleanMatch,
 │   │                                 matchStar (contains, first match), perkList (plain text announced to everyone)
 │   ├── content.js                    CLIENT-SAFE constants only (levels, private-part blocklist, running
 │   │                                 animals, pet-duration limits, drink categories, default drinks/odds)
@@ -184,6 +190,8 @@ party-games/
 │   │                                 idle close (inside the action transaction), per-turn stats
 │   │                                 v11: createRaceRoom, creator tag, ⭐ star partner cards (opposite sex, ≥ partnerMinSec,
 │   │                                 {who}/{partner}), star drink odds + luck re-roll, surprise partner pick, all labelled
+│   │                                 v12: quiet drinks/luck for star OR blessed; pairing only for the star; endRoom spins the
+│   │                                 ToD wheel (daresDone / chicken); race_end action (podium → wheel); publicRoom.wheel
 │   ├── results.js                    STATS/RESULTS LOGIC: state.stats shape, awards, ties, funny titles, pairs
 │   ├── auth.js                       SESSION/AUTH LOGIC: Argon2id, login + lockout, IP throttling,
 │   │                                 session tokens (SHA-256 in DB), roles, audit log
@@ -214,11 +222,11 @@ party-games/
 │   │                                 fallback. Keep-off grid; covers + roam points in each track's LOCAL frame
 │   │                                 (same progress / side / distance), mirrored; landscape = rotated portrait
 │   ├── race/layout.worker.js         Web Worker: builds a map (layout()) off the main thread
-│   ├── race/layoutClient.js          Worker client + cache (slot|w×h|n|mode → Promise<map>); main-thread idle
+│   ├── race/layoutClient.js          v12 visibleBox()/syncViewport() → --rb-top/left/w/h px (iPhone Safari bars); Worker client + cache (slot|w×h|n|mode → Promise<map>); main-thread idle
 │   │                                 fallback only if Workers are unavailable
 │   │                                 v10: boardSize() measures an invisible .race-board probe (visible viewport via
 │   │                                 --vvh / 100dvh minus env(safe-area-inset-*)); syncViewport() sets --vvh
-│   ├── race/engine.js                Pure race state machine (v11: star lane × tapMult, gentler hunters/weather, hunter looks away): taps × speed, idle = hidden in a bush (every role),
+│   ├── race/engine.js                Pure race state machine (v12: per-racer boost {tap, gentle, luck} for star + blessed; hunter looks away quietly): taps × speed, idle = hidden in a bush (every role),
 │   │                                 racer crashes (predator/prey → both home; same role + opposite gender → 💕
 │   │                                 BOTH get a baby, 10 s cooldown; else pass; Human passes), HUNTER waves (same
 │   │                                 times for every track; each hunter hunts only its own track's racer):
@@ -265,6 +273,7 @@ party-games/
 | **Animal Race state** | Only in the phone's memory during a race (no room, no DB row, nothing sent to the server); players remembered in localStorage `partygames.tod.players.v3` (shared with Truth or Dare) |
 | Animal Race animals | Same `animal_pool` table; roles dealt by `lib/animals.js` |
 | **⭐ Party Star (v11)** | Global label + default perks: `settings.party_star` (Admin → Game settings → ⭐ Star player). Session match + perks: `sessions.party_star` (deleted with the session at logout). Per-room snapshot: `rooms.party_star` + `rooms.creator_id` / `creator_session`. Logic: `lib/partystar.js`, `lib/partystar-shared.js`, `lib/game.js`, `app/api/race/start`, `lib/race/engine.js`, `components/race/RaceBoard.js` |
+| **🍀 Blessed + 🎡 wheel (v12)** | Blessed = first player matching the session name (`rooms.party_star.blessed`, never public): quiet drinks/luck/race perks. Star = `rooms.party_star.player` (game 1 = blessed; then the previous room's `state.wheel.winner`). Wheel weights: `settings.party_star.wheel` (Admin → ⭐ Star player). Spin: `lib/partystar.js` spinWheel at ToD end / race `race_end`; shown by `components/party/StarWheel.js` |
 | Audit trail | `audit_log` table (who, action, target, IP, time) |
 | Login rate limiting | `login_throttle` table (per IP) + `users.failed_attempts` / `locked_until` (5 fails → 15 min lock) |
 
@@ -361,6 +370,34 @@ flowchart LR
   RS --> RM[("rooms: creator_id, creator_session,<br/>party_star snapshot")]
   RM --> ANN["Everyone sees: ⭐ label: name + perk list,<br/>⭐ badges, labelled perk cards / pairs / drinks"]
   LO["Logout"] -->|"DELETE session row"| S
+```
+
+16. **🍀 Blessed + 🎡 wheel (v12)**: the session name match is now the **blessed** player: quiet perks for the whole
+   room (chicken-out drink odds, luck re-roll, race ×strides, never the Human, gentler hunters/weather), never named on
+   screen (the race start response carries per-racer `boost` because the race runs on the phone). The **Party Star**
+   (visible: ⭐ badge + collapsed perk dropdown) has ALL perks incl. the pairing perks (partner questions, surprise
+   partner, race crossing partner); pairing perks only ever apply to the current star. Game 1: star = blessed. When a
+   Party Star game ends (ToD end / race champion → `race_end {order}`), the server spins the wheel (crypto, weighted:
+   ToD base + bonus for most dares DONE (rank 1-3), most chicken-outs × factor and always the smallest; Race base +
+   podium bonus; blessed + %) and stores `state.wheel`; every phone animates the same result. "Play again"/"Again" in
+   the same group sends `prev {code, token}` → the winner is the next star (falls back to the blessed player if the
+   winner is not in the new group; a race replay keeps the animals). Per-card / race "⭐ pick" labels were removed.
+17. **iPhone Safari bars (v12)**: the race board's box = min(visualViewport.height, 100svh, innerHeight, layout
+   viewport) − safe areas − 12 px, written as px CSS variables; re-measured on visualViewport resize/scroll, resize and
+   rotation. Before ▶ a changed size gets a new map; mid-race the map layer is scaled (transform) to fit, so the
+   bottom tap buttons never slide under Safari's URL pill + toolbar.
+
+```mermaid
+flowchart LR
+  S[("sessions.party_star<br/>name match")] --> RS["resolveRoomStar<br/>blessed = first match<br/>star = prev wheel winner ∈ group, else blessed"]
+  PR["prev room {code, token}<br/>(Play again / Again)"] --> RS
+  RS --> RM[("rooms.party_star<br/>{player, blessed, perks, wheel, round}")]
+  RM --> Q["🍀 quiet perks: star + blessed<br/>drinks · luck · strides · never Human · gentler"]
+  RM --> V["⭐ visible star: badge + collapsed dropdown<br/>+ pairing perks (partner, surprise, crossing)"]
+  RM --> END["game ends: ToD end / race_end {order}"]
+  END --> W["spinWheel (crypto)<br/>dares done · chicken-outs · podium · blessed +%"]
+  W --> SW["🎡 StarWheel animation on every phone"]
+  W -->|"state.wheel.winner"| PR
 ```
 
 ### Animal Race (v9) on the phone

@@ -1,12 +1,12 @@
 import { route, json, readJson } from '@/lib/http';
 import { requireRole, audit } from '@/lib/auth';
 import { getStarSettings, saveStarSettings, resetStarSettings } from '@/lib/partystar';
-import { STAR_FIELDS, STAR_DEFAULTS, STAR_LABEL_DEFAULT } from '@/lib/partystar-shared';
+import { STAR_FIELDS, STAR_DEFAULTS, STAR_LABEL_DEFAULT, WHEEL_FIELDS, WHEEL_DEFAULTS } from '@/lib/partystar-shared';
 
-// v11 Admin-only: the visible role name (default "Party Star") + default perks (toggle + value each).
+// v11 Admin-only: the visible role name (default "Party Star") + default perks (toggle + value each); v12 + wheel weights.
 export const GET = route(async (req) => {
   await requireRole(req, ['admin']);
-  return json({ ...(await getStarSettings()), fields: STAR_FIELDS, defaults: STAR_DEFAULTS, labelDefault: STAR_LABEL_DEFAULT });
+  return json({ ...(await getStarSettings()), fields: STAR_FIELDS, defaults: STAR_DEFAULTS, labelDefault: STAR_LABEL_DEFAULT, wheelFields: WHEEL_FIELDS, wheelDefaults: WHEEL_DEFAULTS });
 });
 
 export const PUT = route(async (req) => {
@@ -14,5 +14,5 @@ export const PUT = route(async (req) => {
   const body = await readJson(req, 4096);
   const saved = body?.reset === true ? await resetStarSettings() : await saveStarSettings(body); // reset = back to built-in defaults
   await audit(user, 'party_star_settings', 'global', saved, req);
-  return json({ ...saved, fields: STAR_FIELDS, defaults: STAR_DEFAULTS, labelDefault: STAR_LABEL_DEFAULT });
+  return json({ ...saved, fields: STAR_FIELDS, defaults: STAR_DEFAULTS, labelDefault: STAR_LABEL_DEFAULT, wheelFields: WHEEL_FIELDS, wheelDefaults: WHEEL_DEFAULTS });
 }, { mutation: true });
