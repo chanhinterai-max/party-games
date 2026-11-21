@@ -6,6 +6,8 @@ import { api } from '@/components/api';
 import PlayerRows from '@/components/party/PlayerRows';
 import useNoSelect from '@/components/party/useNoSelect';
 import AnimalList from '@/components/party/AnimalList';
+import StarAnnounce from '@/components/party/StarAnnounce';
+import StarBadge from '@/components/party/StarBadge';
 import { STORE_PLAYERS, MAX, blank, save, loadPlayers, checkPlayers } from '@/components/party/store';
 import { makeHeats, needsFinal } from '@/lib/race/heats';
 
@@ -42,8 +44,9 @@ export default function AnimalRace() {
   const [phase, setPhase] = useState('setup'); // setup | meet | race | results | champion
   const [cur, setCur] = useState(0);        // index of the race being run (heats..., then final)
   const [mode, setMode] = useState('normal'); // normal | adult
+  const [host, setHost] = useState(false);    // v11: opened from an advanced user's Rooms page (?host=1)
 
-  useEffect(() => { const p = loadPlayers(); if (p) setPlayers(p); try { if (localStorage.getItem(MODE_KEY) === 'adult') setMode('adult'); } catch {} }, []);
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('host') === '1') setHost(true); const p = loadPlayers(); if (p) setPlayers(p); try { if (localStorage.getItem(MODE_KEY) === 'adult') setMode('adult'); } catch {} }, []);
   const pickMode = (m) => { setMode(m); try { localStorage.setItem(MODE_KEY, m); } catch {} };
 
   async function start() {
@@ -53,14 +56,30 @@ export default function AnimalRace() {
     setBusy(true);
     loadBoard(); loadResults(); loadConfetti(); loadMaps(); // fetch the race code while the server deals the animals
     try {
-      const d = await api('/api/race/start', { method: 'POST', body: { players: c.filled } });
+      const d = await api('/api/race/start', { method: 'POST', body: { players: c.filled, ...(host ? { host: true } : {}) } });
       save(STORE_PLAYERS, c.filled); setPlayers(c.filled);
       setGame(d); newPlan(d); setPhase('meet'); window.scrollTo(0, 0);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   function newPlan(d) {
     const heats = makeHeats(d.players, d.animals, 4);
-    setPlan({ heats, results: [], hasFinal: needsFinal(heats) });
+    // v11 ⭐ Party Star "crossing partner": with raceCrossPct % an opposite-sex racer of the SAME role joins the
+    // star's heat (swapped in) and the board puts the two on crossing tracks. Shown as "⭐ …'s pick 💕".
+    let pair = null; const S = d.star;
+    if (S?.perks?.raceCrossOn && Math.random() * 100 < S.perks.raceCrossPct) {
+      const role = d.animals[S.player]?.role; const g = d.genders?.[S.player];
+      const cands = d.players.filter((p) => p !== S.player && d.animals[p]?.role === role && role !== 'human' && d.genders?.[p] && d.genders[p] !== g);
+      if (cands.length) {
+        const partner = cands[Math.floor(Math.random() * cands.length)];
+        const hs = heats.findIndex((h) => h.includes(S.player)), hp = heats.findIndex((h) => h.includes(partner));
+        const out = hs !== hp ? heats[hs].find((p) => p !== S.player) : null;
+        if (out !== null && out !== undefined) { // swap the partner with someone else from the star's heat
+          const ix = heats[hp].indexOf(partner); heats[hs][heats[hs].indexOf(out)] = partner; heats[hp][ix] = out;
+        }
+        pair = [S.player, partner];
+      }
+    }
+    setPlan({ heats, results: [], hasFinal: needsFinal(heats), pair });
     setCur(0); setPlanId((x) => x + 1);
   }
   // the races: each heat, then (if more than one heat) the final with the heat winners
@@ -73,7 +92,12 @@ export default function AnimalRace() {
     setPhase('results'); window.scrollTo(0, 0);
   }
   function next() {
-    if (isFinal(cur)) { setPhase('champion'); window.scrollTo(0, 0); return; }
+    if (isFinal(cur)) {
+      setPhase('champion'); window.scrollTo(0, 0);
+      // v11: a hosted race room is ended (fire-and-forget) when the champion is crowned
+      if (game.room && !game.room.ended) { game.room.ended = true; api(`/api/rooms/${game.room.code}/action`, { method: 'POST', body: { action: 'end' }, headers: { 'x-room-token': game.room.token } }).catch(() => {}); }
+      return;
+    }
     window.__nextPressAt = performance.now(); // instant-next-heat measurement (press → first board frame)
     setCur(cur + 1); setPhase('race');
   }
@@ -106,6 +130,7 @@ export default function AnimalRace() {
           </div>
           <PlayerRows players={players} setPlayers={setPlayers} missing={missing} />
         </div>
+        {host && <p className="host-note" data-host-note>🎛️ New race room under your login (from your Rooms page). Any ⭐ special player you set for this session is announced to everyone at the start.</p>}
         <div className="mode-pick" role="group" aria-label="Mode">
           <button type="button" className={`mode-btn ${mode === 'normal' ? 'on' : ''}`} data-mode-pick="normal" aria-pressed={mode === 'normal'} onClick={() => pickMode('normal')}>🌞 Normal</button>
           <button type="button" className={`mode-btn ${mode === 'adult' ? 'on' : ''}`} data-mode-pick="adult" aria-pressed={mode === 'adult'} onClick={() => pickMode('adult')}>🌙⛈️ Adult</button>
@@ -122,7 +147,7 @@ export default function AnimalRace() {
     );
   }
 
-  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100 }));
+  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100, star: game.star?.player === n }));
 
   if (phase === 'meet') {
     const cnt = (r) => Object.values(game.animals).filter((a) => a.role === r).length;
@@ -132,10 +157,13 @@ export default function AnimalRace() {
         <div className="reveal-stage" data-reveal-stage>
           <h2 className="reveal-title">🐾 Meet the party animals!</h2>
           <p className="count" style={{ textAlign: 'center' }}>{cnt('predator')} predators · {cnt('prey')} prey{cnt('human') ? ' · 1 Human' : ''}</p>
-          <AnimalList players={game.players} animals={game.animals} genders={game.genders} />
+          <StarAnnounce star={game.star} />
+          <AnimalList players={game.players} animals={game.animals} genders={game.genders} star={game.star} />
+          {plan.pair && game.star && <p className="star-strip" data-star-tag>⭐ {game.star.label}’s pick 💕 {plan.pair[1]} races in the same heat on a crossing track</p>}
+          {game.room && <p className="count" style={{ textAlign: 'center' }} data-race-room={game.room.code}>Room {game.room.code} · saved under your login</p>}
           <div className="heat-plan" data-heat-plan={plan.heats.map((h) => h.length).join('+')}>
             {plan.heats.map((h, i) => (
-              <div key={i} className="heat-chip" data-heat={i}>
+              <div key={i} className="heat-chip" data-heat={i} data-heat-names={h.join(",")}>
                 <b>{plan.hasFinal ? `Heat ${i + 1}` : '👑 Final'}</b> {h.map((n) => (game.animals[n]?.role === 'human' ? '🧍' : game.animals[n]?.emoji)).join(' ')}
               </div>
             ))}
@@ -149,7 +177,7 @@ export default function AnimalRace() {
 
   if (phase === 'race') {
     const names = races[cur];
-    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} tune={game.tune} />;
+    return <RaceBoard key={`race-${cur}-${plan.results.length}`} slot={slotOf(cur)} racers={racersOf(names)} label={labelOf(cur)} onDone={onDone} mode={mode} tune={game.tune} star={game.star} pair={plan.pair && names.includes(plan.pair[0]) && names.includes(plan.pair[1]) ? plan.pair : null} />;
   }
 
   const res = plan.results[cur];
@@ -157,7 +185,7 @@ export default function AnimalRace() {
     return (
       <>
         <Top />
-        <RaceResults result={res} animals={game.animals} genders={game.genders} title={labelOf(cur)} />
+        <RaceResults result={res} animals={game.animals} genders={game.genders} title={labelOf(cur)} star={game.star} />
         <div className="section">
           <button className="btn btn-primary" data-act="next-race" onClick={next}>
             {isFinal(cur) ? '👑 Champion' : isFinal(cur + 1) ? '👑 Final ▶' : `Heat ${cur + 2} ▶`}</button>
@@ -174,7 +202,7 @@ export default function AnimalRace() {
       <div className="champion" data-champion={champ}>
         <div className="crown" aria-hidden="true">👑</div>
         <div className="champ-animal">{a?.role === 'human' ? '🧍' : a?.emoji}</div>
-        <div className="champ-name">{champ}</div>
+        <div className="champ-name">{champ}{game.star?.player === champ && <StarBadge label={game.star.label} />}</div>
         <div className="champ-title">Party Animal</div>
       </div>
       <div className="drink-call small" data-drink={res.drinkers.join(',')}>

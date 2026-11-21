@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RACE, modeCfg } from '@/lib/race/config';
 import { applyTunables } from '@/lib/race/tunables';
 import { trackPoint } from '@/lib/race/geometry';
@@ -51,13 +51,31 @@ function drawPool(g, x, y, R) {
 // haptics: navigator.vibrate where it exists (Android); iOS Safari has none → silently nothing
 function vibrate(p) { try { if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(p); } catch { /* ignore */ } }
 
-export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng, slot = 'x', tune }) {
+// v11 Party Star: put the star and their chosen partner (pair = [star, partner]) on two tracks that CROSS
+// (any in-zone crossing of the map); everyone else keeps their order. Returns { list, crossed }.
+function arrange(racers, lay, pair) {
+  if (!lay || !pair) return { list: racers, crossed: false };
+  const si = racers.findIndex((r) => r.name === pair[0]), pi = racers.findIndex((r) => r.name === pair[1]);
+  const c = lay.crossings.find((x) => x.inZone);
+  if (si < 0 || pi < 0 || !c) return { list: racers, crossed: false };
+  const out = new Array(racers.length); out[c.a] = racers[si]; out[c.b] = racers[pi];
+  const rest = racers.filter((_, i) => i !== si && i !== pi); let k = 0;
+  for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = rest[k++];
+  return { list: out, crossed: true };
+}
+
+export default function RaceBoard({ racers: given, label, onDone, mode = 'normal', rng, slot = 'x', tune, star = null, pair = null }) {
   const boardRef = useRef(null), bgRef = useRef(null), fgRef = useRef(null), cdRef = useRef(null), flashRef = useRef(null), nightRef = useRef(null), skyRef = useRef(null), iconRef = useRef(null), freezeRef = useRef(null), bannerRef = useRef(null);
   const btnRefs = useRef([]);
   const [lay, setLay] = useState(null);
+  const { list: racers, crossed } = useMemo(() => arrange(given, lay, pair), [lay]); // eslint-disable-line react-hooks/exhaustive-deps
   const [stage, setStage] = useState('ready');
   const [remap, setRemap] = useState(false); // v10: a new map for a new visible size is being built (▶ waits) // ready | countdown(race) | finish
-  const cfgRef = useRef(null); if (!cfgRef.current) cfgRef.current = modeCfg(mode, applyTunables(RACE, tune)); // v10: admin overrides
+  const cfgRef = useRef(null);
+  if (!cfgRef.current) { // v10: admin overrides; v11: ⭐ Party Star perks (only for the racer with star: true)
+    const base = modeCfg(mode, applyTunables(RACE, tune)); const P = star?.perks;
+    cfgRef.current = P ? { ...base, star: { tapMult: P.raceTapOn ? P.raceTapMult : 1, gentle: P.raceGentleOn ? P.raceGentlePct / 100 : 0, luck: P.luckOn ? P.luckPct / 100 : 0 } } : base;
+  }
 
   // 1) lock the page, get the (usually already built) map for this heat
   useEffect(() => {
@@ -256,6 +274,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
           draw(sp('💥', 22), f.x, f.y, 1 - e); // impact
           continue;
         }
+        if (f.kind === 'star') { const e = (now - f.t) / cfg.heartsMs; draw(sp('⭐', 18 + e * 8), f.x, f.y - 16 - e * 30, 1 - e); continue; } // v11 lucky moment
         if (f.kind === 'poof') { const e = (now - f.t) / cfg.poofMs; draw(sp('💨', 18 + e * 16), f.x, f.y - e * 10, 1 - e); draw(sp('✨', 14), f.x + 8, f.y - 6 - e * 20, 1 - e); continue; }
         const e = (now - f.t) / cfg.heartsMs;
         if (f.kind === 'hearts') for (let k = 0; k < 3; k++) draw(sp('💕', 20), f.x + (k - 1) * 14, f.y - 10 - e * 40 - k * 6, 1 - e);
@@ -336,7 +355,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
             return (
               <button key={`b-${i}`} type="button" className={`race-btn role-${r.role}`} data-tap={i} data-hit="0" ref={(el) => { btnRefs.current[i] = el; }}
                 style={{ left: g.btn.x, top: g.btn.y, width: lay.bR ? lay.bR * 2 : RACE.buttonSize, height: lay.bR ? lay.bR * 2 : RACE.buttonSize, transform: `translate(-50%,-50%) rotate(${g.rot}deg)` }}>
-                <span className="e">{r.role === 'human' ? '🧍' : r.emoji}</span><span className="n">{r.name}</span>
+                <span className="e">{r.role === 'human' ? '🧍' : r.emoji}</span><span className="n">{r.name}{r.star ? ' ⭐' : ''}</span>
               </button>
             );
           })}
@@ -344,6 +363,7 @@ export default function RaceBoard({ racers, label, onDone, mode = 'normal', rng,
             {stage === 'ready' && (
               <>
                 <div className="race-label">{label}{mode === 'adult' ? ' · 🌙⛈️' : ''}</div>
+                {crossed && star && <div className="race-star-pick" data-star-tag>⭐ {star.label}’s pick 💕 {pair[1]} crosses {pair[0]}</div>}
                 <button type="button" className="race-go" data-act="race-go" disabled={remap} aria-busy={remap} onClick={() => setStage('countdown')}>{remap ? '…' : '▶'}</button>
               </>
             )}

@@ -8,20 +8,20 @@ phone's browser, the API runs as Vercel Functions (Node.js), and all state lives
 flowchart LR
   subgraph Browser["📱 Phone / browser"]
     P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔 (only after the card is revealed, v10), running party animals, confetti results"]
-    A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool<br/>/room landing (v10): ⚡ race speed sliders + global editors"]
+    A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool<br/>/room landing (v10): ⚡ race speed sliders + global editors<br/>v11: ➕ New Truth or Dare / Animal Race room (?host=1) + ⭐ Party Star popup once per login"]
     RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), sized to the VISIBLE viewport minus safe areas (v10), 🏊 party-pool goal + splash, random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)"]
     WK["🧵 Web Worker lib/race/layout.worker.js<br/>builds every heat's map off the main thread"]
-    D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>games, rooms, audit,<br/>🎮 Game settings tabs (v10): ToD odds/pet rule/surprise share/drinks/cards/bank ·<br/>Race tunables + speed sliders"]
+    D["Admin /admin<br/>account, users, question bank (heat, timer),<br/>games, rooms, audit,<br/>🎮 Game settings tabs (v10): ToD odds/pet rule/surprise share/drinks/cards/bank ·<br/>Race tunables + speed sliders · v11 ⭐ Star player tab (label + perk defaults)"]
   end
   subgraph Vercel["▲ Vercel (Next.js 16 Functions)"]
     R1["/api/rooms/*<br/>create (1:1 predator/prey + Human, surprise schedule),<br/>draw / done / chicken / surprise_done / level / end · idle close · results"]
-    R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises"]
+    R2["/api/rooms/[code]/queue · /api/me/categories<br/>/api/drinks · /api/surprises · /api/me/party-star (v11)"]
     R3["/api/auth/* · /api/setup"]
-    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>+ admin race tunables (v10) — no room, no DB writes"]
-    R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, race-settings (v10), games, rooms, audit"]
-    L["lib/: animals (shared roles) · race/* (config, tunables, heats, geometry, engine — also bundled to the phone) ·<br/>game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
+    R5["/api/race/start (stateless)<br/>validate players, game enabled?, assign animals + speed_pct<br/>+ admin race tunables (v10) — no room, no DB writes<br/>v11: host=true + login → race room row (creator tag) + ⭐ star"]
+    R4["/api/admin/*<br/>account, users, bank, chicken-odds + pet duration,<br/>surprise-rate, race-settings (v10), party-star (v11), games, rooms, audit"]
+    L["lib/: animals (shared roles) · race/* (config, tunables, heats, geometry, engine — also bundled to the phone) ·<br/>partystar (v11, + partystar-shared for the phone) · game · results · bank · surprises · settings · categories · auth · db<br/>(seed.js, seed-v5.js, seed-v6.js are server-only)"]
   end
-  DB[("🐘 Neon Postgres<br/>users · sessions · rooms · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_pool (predator/prey, speed_pct) · human_items<br/>user_categories · settings (drinks, odds, pet, surprise, race, seed_v5, seed_v6)")]
+  DB[("🐘 Neon Postgres<br/>users · sessions (+ party_star v11) · rooms (+ creator_id, creator_session, party_star v11) · games · audit_log · login_throttle<br/>bank_who · bank_what (heat, seconds) · bank_where (heat)<br/>surprise_items · animal_pool (predator/prey, speed_pct) · human_items<br/>user_categories · settings (drinks, odds, pet, surprise, race, party_star, seed_v5, seed_v6)")]
   P -- "JSON + x-room-token" --> R1
   A -- "httpOnly session cookie" --> R2
   D -- "httpOnly session cookie" --> R4
@@ -47,14 +47,20 @@ party-games/
 │   │                                 single draw request is in flight), timers, Chicken out 🐔, running animals =
 │   │                                 the players' own animals (Human = 🏃), "🧍 Human card" label,
 │   │                                 End game, results + confetti
+│   │                                 v11: ?host=1 → host note; ⭐ start announcement, ⭐ badges, ⭐ in score chips,
+│   │                                 "⭐ <label>’s pick 💕" on perk cards / surprise pairs, drink-odds/luck tag on chicken
 │   ├── play/animal-race/page.js      🏁 ANIMAL RACE: setup (shared PlayerRows) → Meet the animals (shared
 │   │                                 AnimalList + heat plan chips) → heats → final → champion; remembers players.
 │   │                                 v9: RaceBoard / RaceResults / Confetti via next/dynamic, prefetched on "Race!";
 │   │                                 every heat's map requested from the Web Worker during meet/results (instant next heat)
+│   │                                 v11: ?host=1 → race room (ended at the champion); ⭐ announcement + badges; crossing
+│   │                                 partner swapped into the star's heat (plan.pair → RaceBoard); ⭐ on results + champion
 │   ├── login/page.js                 Login form (advanced players + admins)
 │   ├── setup/page.js                 One-time first-admin form (needs ADMIN_SETUP_SECRET)
 │   ├── room/page.js                  Enter a room code; v10: advanced users land here → ⚡ race speed sliders +
 │   │                                 global surprise/pool editor (lazy, signed-in advanced/admin only)
+│   │                                 v11: ➕ CREATE ROOM tiles (Truth or Dare / Animal Race via ?host=1) next to the
+│   │                                 room-code form; ⭐ Party Star status line + PartyStarPopup (once per login session)
 │   ├── room/[code]/page.js           ADVANCED: live view + queue editor (components/QueueEditor.js; its Category /
 │   │                                 Drinks / Surprise editors load lazily)
 │   ├── admin/page.js                 ADMIN PAGE: my account, users (create/enable/reset/delete), question
@@ -63,9 +69,12 @@ party-games/
 │   └── api/
 │       ├── games/route.js            GET enabled games (public)
 │       ├── admin/race-settings/route.js  v10 ADMIN: GET/PUT Animal Race tunables (validated; overrides only)
-│       ├── race/start/route.js       ANIMAL RACE START (POST, stateless): game enabled? players valid? → animals
+│       ├── admin/party-star/route.js v11 ADMIN: GET/PUT ⭐ role label + default perks ({reset:true} → built-in defaults)
+│       ├── me/party-star/route.js    v11 ADVANCED: GET/PUT this login session's Party Star match + perks (sessions.party_star)
+│       ├── race/start/route.js       ANIMAL RACE START (POST; stateless unless v11 host=true + login → race room + creator tag + ⭐ star, never Human): game enabled? players valid? → animals
 │       │                             (1:1 predator/prey + Human) with speed_pct (v9: no wild list)
 │       ├── rooms/route.js            POST create room (players with gender) → code + host token + public animals
+│       │                             v11: host=true (advanced login) → creator tag + ⭐ star snapshot on the room
 │       ├── rooms/[code]/route.js     GET public room state (no odds / rule ever exposed)
 │       ├── rooms/[code]/action/route.js  POST draw | done | chicken {petted:[{id,elapsedMs}]} | surprise_done | level | end
 │       │                                 (host token; response = new state, no history → no refetch)
@@ -114,7 +123,12 @@ party-games/
 │   │                                 (user-select none, -webkit-touch-callout none) + blocks contextmenu /
 │   │                                 selectstart / dragstart except inside inputs (player names still editable)
 │   ├── party/AnimalList.js           SHARED "Meet the animals" list (name, gender dot, emoji, Predator/Prey/Human)
-│   ├── race/RaceBoard.js             RACE BOARD (v9 canvas): static background canvas (tracks, puddles, goal; drawn
+│   ├── party/StarBadge.js            v11 "⭐ <label>" badge (animal lists, race lane/results, champion)
+│   ├── party/StarAnnounce.js         v11 start announcement "⭐ <label>: <name>" + plain perk list (+ compact strip)
+│   ├── PartyStarPopup.js             v11 once-per-login popup: name match (contains, case-insensitive) + session perks
+│   ├── StarPerksForm.js              v11 shared perk toggles + values (admin card + session popup)
+│   ├── admin/PartyStarPanel.js       v11 Admin → Game settings → ⭐ Star player: label rename + default perks
+│   ├── race/RaceBoard.js             RACE BOARD (v9 canvas; v11 ⭐ lane name, cfg.star perks, crossing pair + "⭐ …’s pick 💕" label, ⭐ luck fx): static background canvas (tracks, puddles, goal; drawn
 │   │                                 once) + ONE dynamic canvas redrawn per rAF (racers, 🌿 bush over every hidden
 │   │                                 racer, health bars below full, babies trailing their parent + 💨 poof, 🤠🔫
 │   │                                 hunters + spotlight cones (night: long glowing cut-outs on the low-res night
@@ -127,7 +141,7 @@ party-games/
 │   │                                 v10: 🏊 PARTY POOL goal drawn once in the bg canvas (deck, water, floats) + 1
 │   │                                 ripple ring/frame; winner hops in with a splash. Admin tunables via `tune` prop.
 │   │                                 Re-maps on visualViewport resize before ▶; button size from lay.bR
-│   ├── race/RaceResults.js           Heat/final podium (medals, distance bars) + 🍺 Drink! callout for last place
+│   ├── race/RaceResults.js           Heat/final podium (medals, distance bars) + 🍺 Drink! callout for last place; v11 ⭐ badge
 │   ├── play/Timer.js                 Countdown (Start/Pause + Reset), runs only on the phone
 │   ├── play/Confetti.js              Hand-rolled CSS confetti (36 spans, after first paint, reduced-motion off)
 │   ├── play/SurpriseBody.js          Surprise face: Animal Match (predator + prey, with player names), Human,
@@ -142,6 +156,10 @@ party-games/
 │   ├── admin/OddsPanel.js            Chicken odds + hidden rule (pet-rule target select)
 │   └── api.js                        fetch helper
 ├── lib/                              ── server-side logic
+│   ├── partystar.js                  v11 SERVER: settings `party_star` {label, perks}, session match, resolveRoomStar
+│   │                                 (host + advanced/admin + session match → first matching player), publicStar
+│   ├── partystar-shared.js           v11 SHARED (server + phone): defaults, field ranges, cleanPerks/cleanLabel/cleanMatch,
+│   │                                 matchStar (contains, first match), perkList (plain text announced to everyone)
 │   ├── content.js                    CLIENT-SAFE constants only (levels, private-part blocklist, running
 │   │                                 animals, pet-duration limits, drink categories, default drinks/odds)
 │   ├── seed.js                       SERVER-ONLY first-run bank seed (WHO, WHERE incl. thigh, WHAT templates,
@@ -164,11 +182,15 @@ party-games/
 │   │                                 end, surprise schedule fixed at Start + 3-turn virus, 1:1 predator/prey
 │   │                                 assignment (+ Human on odd counts), Human Truth/Dare draws (1 in 3),
 │   │                                 idle close (inside the action transaction), per-turn stats
+│   │                                 v11: createRaceRoom, creator tag, ⭐ star partner cards (opposite sex, ≥ partnerMinSec,
+│   │                                 {who}/{partner}), star drink odds + luck re-roll, surprise partner pick, all labelled
 │   ├── results.js                    STATS/RESULTS LOGIC: state.stats shape, awards, ties, funny titles, pairs
 │   ├── auth.js                       SESSION/AUTH LOGIC: Argon2id, login + lockout, IP throttling,
 │   │                                 session tokens (SHA-256 in DB), roles, audit log
+│   │                                 v11: getUser also returns sessions.party_star (session_star); logout deletes it
 │   ├── db.js                         DATABASE SCHEMA + idempotent additive migrations + first-run seeding +
 │   │                                 one-time `seed_v5` / `seed_v6` (inserts only missing rows; never wipes edits)
+│   │                                 v11 additive: sessions.party_star, rooms.creator_id / creator_session / party_star
 │   ├── animals.js                    SHARED ANIMAL ROLES: shuffle, 1:1 predator/prey + 🧍 Human on odd counts,
 │   │                                 public animal view (used by game.js and the race start API)
 │   ├── race/tunables.js              v10: the admin-tunable race numbers (defaults = config.js), validate / clean /
@@ -196,7 +218,7 @@ party-games/
 │   │                                 fallback only if Workers are unavailable
 │   │                                 v10: boardSize() measures an invisible .race-board probe (visible viewport via
 │   │                                 --vvh / 100dvh minus env(safe-area-inset-*)); syncViewport() sets --vvh
-│   ├── race/engine.js                Pure race state machine: taps × speed, idle = hidden in a bush (every role),
+│   ├── race/engine.js                Pure race state machine (v11: star lane × tapMult, gentler hunters/weather, hunter looks away): taps × speed, idle = hidden in a bush (every role),
 │   │                                 racer crashes (predator/prey → both home; same role + opposite gender → 💕
 │   │                                 BOTH get a baby, 10 s cooldown; else pass; Human passes), HUNTER waves (same
 │   │                                 times for every track; each hunter hunts only its own track's racer):
@@ -242,6 +264,7 @@ party-games/
 | **Race mode** | localStorage `partygames.race.mode` (normal / adult), picked on the race setup screen |
 | **Animal Race state** | Only in the phone's memory during a race (no room, no DB row, nothing sent to the server); players remembered in localStorage `partygames.tod.players.v3` (shared with Truth or Dare) |
 | Animal Race animals | Same `animal_pool` table; roles dealt by `lib/animals.js` |
+| **⭐ Party Star (v11)** | Global label + default perks: `settings.party_star` (Admin → Game settings → ⭐ Star player). Session match + perks: `sessions.party_star` (deleted with the session at logout). Per-room snapshot: `rooms.party_star` + `rooms.creator_id` / `creator_session`. Logic: `lib/partystar.js`, `lib/partystar-shared.js`, `lib/game.js`, `app/api/race/start`, `lib/race/engine.js`, `components/race/RaceBoard.js` |
 | Audit trail | `audit_log` table (who, action, target, IP, time) |
 | Login rate limiting | `login_throttle` table (per IP) + `users.failed_attempts` / `locked_until` (5 fails → 15 min lock) |
 
@@ -312,6 +335,33 @@ party-games/
    ⚡ FREEZE! warning with tint + vibration 1.7 s before the freeze; tapping in the freeze = same zap for anyone),
    wind (gusts push everyone back equally); tapping too fast at night or in rain trips the animal. Text in both
    games can't be selected or long-pressed (useNoSelect).
+
+15. **⭐ Party Star (v11, visible to everyone)**: an advanced user (or admin) logs in → `/room` shows the popup once per
+   login session (name contains …, case-insensitive; optional per-session perk tweaks) → `PUT /api/me/party-star` stores
+   it in `sessions.party_star`. Rooms they create from `/room` (`?host=1` → `host:true`) get `creator_id` +
+   `creator_session` and, when a player name matches, a snapshot `rooms.party_star = {player, gender, label, perks, list}`
+   (first match only; later label/perk edits don't change running rooms). Logout deletes the session row → the setup is
+   gone; a fresh login asks again. Everyone sees the start announcement "⭐ <label>: <name>" + the plain perk list, a ⭐
+   badge (animal list, Animals box, race lane, results, champion), and a label on anything a perk produced ("⭐ <label>’s
+   pick 💕", "⭐ <label>’s drink odds / luck"). Defaults (admin card; toggle + value each): chicken-out drinks 80/10/10
+   water/sparkling/alcohol · 90 % of the star’s questions = partner card with an opposite-sex player, timer ≥ 15 s ·
+   surprise pair cards 90 % opposite-sex partner · luck 70 % (ToD: an alcohol chicken-out drink is re-rolled to
+   water/sparkling; Race: a hunter that spots the star looks away, ⭐ shown) · Race ×1.5 distance per tap · never the
+   Human · 80 % an opposite-sex same-role racer joins the star's heat on a crossing track · hunters + weather 15 %
+   gentler on the star’s track. Public / normal rooms are unchanged (no star).
+
+```mermaid
+flowchart LR
+  U["Advanced user logs in"] --> PP["/room: ⭐ popup (once per login)<br/>match + perks"]
+  PP -->|"PUT /api/me/party-star"| S[("sessions.party_star")]
+  U --> CR["➕ New ToD / Race room (?host=1)"]
+  CR -->|"POST /api/rooms or /api/race/start {host:true}"| RS["resolveRoomStar<br/>advanced? session match? first matching player"]
+  S --> RS
+  ST[("settings.party_star<br/>label + default perks")] --> RS
+  RS --> RM[("rooms: creator_id, creator_session,<br/>party_star snapshot")]
+  RM --> ANN["Everyone sees: ⭐ label: name + perk list,<br/>⭐ badges, labelled perk cards / pairs / drinks"]
+  LO["Logout"] -->|"DELETE session row"| S
+```
 
 ### Animal Race (v9) on the phone
 

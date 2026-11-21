@@ -1,7 +1,8 @@
 import { route, json, readJson, HttpError } from '@/lib/http';
 import { createRoom, validatePlayers, validateLevel, publicRoom } from '@/lib/game';
 import { isGameEnabled } from '@/lib/games';
-import { throttle } from '@/lib/auth';
+import { throttle, getUser, audit } from '@/lib/auth';
+import { resolveRoomStar } from '@/lib/partystar';
 
 export const POST = route(async (req) => {
   const body = await readJson(req);
@@ -12,7 +13,12 @@ export const POST = route(async (req) => {
   const level = validateLevel(body.level);
   const t = await throttle(req, 'room'); // max 20 rooms / 15 min per IP
   await t.fail();
-  const { token, row } = await createRoom({ game, level, players, genders });
+  // v11: a room created from an advanced user's landing page ("host") is tagged with its creator and gets the
+  // VISIBLE Party Star from that login session (if one was set and a player name matches).
+  const user = body.host === true ? await getUser(req) : null;
+  const { creator, star } = await resolveRoomStar(user, body.host === true, game, players, genders);
+  const { token, row } = await createRoom({ game, level, players, genders, creator, star });
+  if (creator) await audit(user, 'room_create', row.code, { game, star: star ? star.player : null }, req);
   // v6: animals are public (room.animals) and shown openly on the shared screen.
   return json({ token, room: publicRoom(row, { lite: true }) }, 201);
 }, { mutation: true });

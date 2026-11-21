@@ -1,10 +1,11 @@
 'use client';
 import GenderDot from '@/components/GenderDot';
 import { RACE } from '@/lib/race/config';
+import StarBadge from '@/components/party/StarBadge';
 
 const MEDAL = ['🥇', '🥈', '🥉', '4'];
 // Heat / final podium. Last place (ties all) drinks — the only drinking rule in Animal Race.
-export default function RaceResults({ result, animals, genders, title }) {
+export default function RaceResults({ result, animals, genders, title, star }) {
   return (
     <div className="race-results" data-race-results>
       <h2 className="reveal-title">{title}</h2>
@@ -16,7 +17,7 @@ export default function RaceResults({ result, animals, genders, title }) {
             <li key={o.name} className={`podium-row place-${o.place}`} data-place={o.place} data-podium={o.name}>
               <span className="medal">{MEDAL[o.place - 1] || o.place}</span>
               <span className="animal-emoji">{a?.role === 'human' ? '🧍' : a?.emoji}</span>
-              <span className="animal-who"><b><GenderDot gender={genders[o.name]} />{o.name}</b>
+              <span className="animal-who"><b><GenderDot gender={genders[o.name]} />{o.name}{star?.player === o.name && <StarBadge label={star.label} />}</b>
                 <span className="dist"><i style={{ width: `${pct}%` }} /></span></span>
             </li>
           );
@@ -24,7 +25,7 @@ export default function RaceResults({ result, animals, genders, title }) {
       </ol>
       <div className="drink-call" data-drink={result.drinkers.join(',')}>
         <div className="drink-icon" aria-hidden="true">🍺</div>
-        <div className="drink-names">{result.drinkers.map((n) => <b key={n}><GenderDot gender={genders[n]} />{n}</b>)}</div>
+        <div className="drink-names">{result.drinkers.map((n) => <b key={n}><GenderDot gender={genders[n]} />{n}{star?.player === n ? ' ⭐' : ''}</b>)}</div>
         <div className="drink-word">Drink!</div>
       </div>
     </div>

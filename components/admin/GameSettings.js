@@ -10,9 +10,10 @@ const BankPanel = dynamic(() => import('./BankPanel'), { ssr: false, loading: La
 const DrinksEditor = dynamic(() => import('../DrinksEditor'), { ssr: false, loading: Lazy });
 const SurpriseEditor = dynamic(() => import('../SurpriseEditor'), { ssr: false, loading: Lazy });
 const RaceSettingsPanel = dynamic(() => import('./RaceSettingsPanel'), { ssr: false, loading: Lazy });
+const PartyStarPanel = dynamic(() => import('./PartyStarPanel'), { ssr: false, loading: Lazy });
 const RaceSpeedEditor = dynamic(() => import('../RaceSpeedEditor'), { ssr: false, loading: Lazy });
 
-const TABS = [['tod', '🎭 Truth or Dare'], ['race', '🏁 Animal Race']];
+const TABS = [['tod', '🎭 Truth or Dare'], ['race', '🏁 Animal Race'], ['star', '⭐ Star player']];
 
 export default function GameSettings() {
   const [tab, setTab] = useState('tod');
@@ -30,6 +31,10 @@ export default function GameSettings() {
           <section className="panel" id="drinks"><DrinksEditor /></section>
           <SurpriseEditor speeds={false} />
           <BankPanel />
+        </div>
+      ) : tab === 'star' ? (
+        <div data-gs-panel="star">
+          <PartyStarPanel />
         </div>
       ) : (
         <div data-gs-panel="race">
