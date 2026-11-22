@@ -125,9 +125,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ---------- Setup ---------- */
 .players { display: flex; flex-direction: column; gap: 10px; }
-.player-row { display: flex; gap: 8px; }
+.player-row { display: flex; gap: 8px; align-items: center; }
 .player-row input {
-  flex: 1; min-height: 52px; border-radius: 14px; border: 1px solid var(--card-border);
+  flex: 1; min-width: 0; width: 0; /* v13: never wider than the row → M/F + ✕ always fully on screen */
+  min-height: 52px; border-radius: 14px; border: 1px solid var(--card-border);
   background: rgba(255, 255, 255, 0.05); color: var(--text); font-size: 1.05rem; padding: 0 14px;
   outline: none;
 }
@@ -276,11 +277,18 @@ a { color: var(--cyan); }
 .gdot.male { background: #2f7bff; box-shadow: 0 0 6px rgba(47,123,255,.8); }
 .gdot.female { background: #ff4fb8; box-shadow: 0 0 6px rgba(255,79,184,.8); }
 .who-tag { white-space: nowrap; }
+/* v13: ToD player tag = animal emoji + name (gender dot only as a fallback) */
+.ptag { white-space: nowrap; }
+.ptag-emoji { margin-right: .25em; font-size: 1.05em; }
 .gender-pick { display: flex; gap: 4px; }
 .gender-pick button { width: 52px; height: 52px; border-radius: 14px; border: 1px solid var(--card-border); background: var(--card); font-weight: 800; font-size: .8rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-.gender-pick button[aria-pressed="true"].male { border-color: #2f7bff; box-shadow: 0 0 12px rgba(47,123,255,.6); }
-.gender-pick button[aria-pressed="true"].female { border-color: #ff4fb8; box-shadow: 0 0 12px rgba(255,79,184,.6); }
-.player-row.missing .gender-pick button { border-color: var(--danger); }
+.gender-pick button { transition: background-color .15s, box-shadow .15s, border-color .15s, color .15s; color: var(--muted); }
+/* v13: the picked gender is unmistakable (filled + glow ring + ✓), in normal AND error state; only the unpicked row is red */
+.gender-pick button[aria-pressed="true"] { color: #fff; border-width: 2px; position: relative; }
+.gender-pick button[aria-pressed="true"]::after { content: '✓'; position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; line-height: 18px; text-align: center; background: #fff; color: #111; box-shadow: 0 0 6px rgba(255,255,255,.7); }
+.gender-pick button[aria-pressed="true"].male { border-color: #6aa4ff; background: rgba(47,123,255,.55); box-shadow: 0 0 0 3px rgba(47,123,255,.45), 0 0 18px rgba(47,123,255,.85); }
+.gender-pick button[aria-pressed="true"].female { border-color: #ff8fd2; background: rgba(255,79,184,.55); box-shadow: 0 0 0 3px rgba(255,79,184,.45), 0 0 18px rgba(255,79,184,.85); }
+.player-row.missing .gender-pick button[aria-pressed="false"] { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(255,77,109,.35); }
 /* ---------- v3: chicken out ---------- */
 .btn-chicken { background: rgba(255,179,64,.14); border: 1px solid rgba(255,179,64,.7); color: var(--amber); }
 .modal-back { position: fixed; inset: 0; background: rgba(5,2,12,.75); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -340,6 +348,7 @@ textarea.input { min-height: 90px; padding: 10px 14px; width: 100%; font-family:
 .titles li { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 12px 14px; }
 .t-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .t-name { margin-left: auto; font-weight: 800; color: var(--pink); }
+.t-title { font-weight: 900; font-size: 1.08rem; color: var(--pink); margin-bottom: 2px; } /* v13: the title comes first */
 .t-line { margin: 4px 0; font-size: .92rem; }
 .qleft { text-align: center; font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
 .closed-banner { border: 1.5px solid var(--amber); border-radius: 16px; padding: 10px 14px; text-align: center; font-weight: 800; margin: 10px 0; }

@@ -7,7 +7,7 @@ phone's browser, the API runs as Vercel Functions (Node.js), and all state lives
 ```mermaid
 flowchart LR
   subgraph Browser["📱 Phone / browser"]
-    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔 (only after the card is revealed, v10), running party animals, confetti results<br/>v12: collapsed ⭐ perk dropdown, 🎡 next-star wheel on results (v12b: EVERY room)"]
+    P["Player screen /play/truth-or-dare<br/>open animal list + 🐾 Animals box, 3D flip card, heat meter,<br/>surprise cards, timers, Chicken out 🐔 (only after the card is revealed, v10), running party animals, confetti results<br/>v12: collapsed ⭐ perk dropdown, 🎡 next-star wheel on results (v12b: EVERY room)<br/>v13: animal emoji + name for every “who”, titles first, Newbies label, glowing gender pick"]
     A["Advanced player /room/[code]<br/>live view, queue editor, quick categories,<br/>global drinks + surprise cards + Human items + animal pool<br/>/room landing (v10): ⚡ race speed sliders + global editors<br/>v11: ➕ New Truth or Dare / Animal Race room (?host=1) + ⭐ Party Star popup once per login"]
     RC["🏁 Animal Race /play/animal-race<br/>setup (Normal / Adult mode) + Meet the animals, heats + final,<br/>RaceBoard: 2 canvases (static bg + 1 rAF canvas), sized to the REAL visible box (v12: min of visualViewport / 100svh / innerHeight − safe areas − 12 px; map scaled to fit if Safari bars appear mid-race), 🏊 party-pool goal + splash, random equal-length crossing tracks<br/>(offset crossings), maps built in a Web Worker ahead of time,<br/>🤠 hunters with spotlights + health bars, everyone hides in 🌿, crashes 💥 / 💕 babies (shields),<br/>3-2-1 countdown, ⚡ FREEZE! warning, haptics, Adult day/night + rain/lightning/wind,<br/>ALL race logic on the phone (lib/race/*)<br/>v12b: 🎡 wheel after EVERY champion (useEndWheel → /api/wheel or room game_end)"]
     WK["🧵 Web Worker lib/race/layout.worker.js<br/>builds every heat's map off the main thread"]
@@ -54,6 +54,7 @@ party-games/
 │   │                                 v12: per-card star labels removed; collapsed ⭐ dropdown at the bottom (start + play);
 │   │                                 🎡 StarWheel on the results; Play again sends prev {code, token} → wheel winner = star
 │   │                                 v12b: useEndWheel('truth-or-dare') + <EndWheel> — the wheel after EVERY room (no login too)
+│   │                                 v13: level label “Newbies” (id 'children'); every “who” = animal emoji + name (PlayerTag)
 │   ├── play/animal-race/page.js      🏁 ANIMAL RACE: setup (shared PlayerRows) → Meet the animals (shared
 │   │                                 AnimalList + heat plan chips) → heats → final → champion; remembers players.
 │   │                                 v9: RaceBoard / RaceResults / Confetti via next/dynamic, prefetched on "Race!";
@@ -115,10 +116,13 @@ party-games/
 ├── components/
 │   ├── AuthButton.js                 Login / user menu (top-right)
 │   ├── QueueEditor.js                Drag-and-drop WHO/WHAT/WHERE editor + category filter
+│   │                                 v13: live view / history / WHO chips = animal emoji + name (PlayerTag)
 │   ├── CategoryManager.js            Add/edit/delete own quick categories
 │   ├── DrinksEditor.js               Global chicken-out drink options
 │   ├── GenderDot.js                  Blue (male) / pink (female) solid circle next to names
+│   │                                 v13: in Truth or Dare only the FALLBACK of PlayerTag (player without an animal)
 │   ├── Results.js                    End-of-game results (awards, titles, pairs) for players + advanced view
+│   │                                 v13: “Everyone’s title” FIRST (title → animal + name → line → stats), then awards/pairs
 │   ├── RunningAnimals.js             CSS-animated animals (in a game: the players' animals, up to 16 lanes; setup:
 │   │                                 generic babies); tap = petted 20 s (reduced-motion aware); they run
 │   │                                 BEHIND the UI (z-index -1) so they never block a button but stay tappable
@@ -131,9 +135,12 @@ party-games/
 │   ├── party/store.js                SHARED setup: remembered players (localStorage key shared by both games),
 │   │                                 min/max, blank row, checkPlayers
 │   ├── party/PlayerRows.js           SHARED name + Male/Female rows + add/remove (Truth or Dare + Animal Race)
+│   │                                 v13: picked gender = filled + glow ring + ✓ (aria-pressed) also in the error state; red
+│   │                                 only on rows still missing one; onFixed() clears the error; input min-width 0 (no overflow)
 │   ├── party/useNoSelect.js          NO SELECTABLE TEXT in both games (every phase): html.no-select class
 │   │                                 (user-select none, -webkit-touch-callout none) + blocks contextmenu /
 │   │                                 selectstart / dragstart except inside inputs (player names still editable)
+│   ├── party/PlayerTag.js            v13 SHARED “who” = animal emoji + name (gender dot fallback) + WithTag for card texts
 │   ├── party/AnimalList.js           SHARED "Meet the animals" list (name, gender dot, emoji, Predator/Prey/Human)
 │   ├── party/StarBadge.js            v11 "⭐ <label>" badge (animal lists, race lane/results, champion)
 │   ├── party/StarAnnounce.js         v12 COLLAPSED <details> dropdown "⭐ <label>: <name> ▸" → plain perk list (start/play/race screens)
@@ -163,6 +170,7 @@ party-games/
 │   ├── play/SurpriseBody.js          Surprise face: Animal Match (predator + prey, with player names), Human,
 │   │                                 Virus, Group vote (1-2-3), Whisper (peek), Chooser
 │   ├── play/Chooser.js               Dare Chooser: multi-touch finger pick + tap-to-join fallback
+│   │                                 v13: names = animal emoji + name
 │   ├── admin/AccountPanel.js         Change own username / password
 │   ├── admin/BankPanel.js            Manage WHO / WHAT (+ heat 1-3, timer seconds) / WHERE (+ heat) bank
 │   ├── admin/SurpriseRatePanel.js    Surprise cards as a share of total questions (admin only)
@@ -178,6 +186,7 @@ party-games/
 │   ├── partystar-shared.js           SHARED (server + phone; v12 PAIR_PERKS, WHEEL_DEFAULTS/FIELDS, cleanWheel, wheelSlices, pickSlice): defaults, field ranges, cleanPerks/cleanLabel/cleanMatch,
 │   │                                 matchStar (contains, first match), perkList (plain text announced to everyone)
 │   ├── content.js                    CLIENT-SAFE constants only (levels, private-part blocklist, running
+│   │                                 v13: LEVELS children → label “Newbies” (id/db value unchanged)
 │   │                                 animals, pet-duration limits, drink categories, default drinks/odds)
 │   ├── seed.js                       SERVER-ONLY first-run bank seed (WHO, WHERE incl. thigh, WHAT templates,
 │   │                                 "Flirty default" category); moved out of content.js to shrink phone JS
@@ -288,6 +297,7 @@ party-games/
 | **⭐ Party Star (v11)** | Global label + default perks: `settings.party_star` (Admin → Game settings → ⭐ Star player). Session match + perks: `sessions.party_star` (deleted with the session at logout). Per-room snapshot: `rooms.party_star` + `rooms.creator_id` / `creator_session`. Logic: `lib/partystar.js`, `lib/partystar-shared.js`, `lib/game.js`, `app/api/race/start`, `lib/race/engine.js`, `components/race/RaceBoard.js` |
 | **🍀 Blessed + 🎡 wheel (v12)** | Blessed = first player matching the session name (`rooms.party_star.blessed`, never public): quiet drinks/luck/race perks. Star = `rooms.party_star.player` (game 1 = blessed; then the previous room's `state.wheel.winner`). Wheel weights: `settings.party_star.wheel` (Admin → ⭐ Star player). Spin: `lib/partystar.js` spinWheel at ToD end / race `race_end`; shown by `components/party/StarWheel.js` |
 | **🎡 End-of-game wheel (v12b)** | EVERY game whose slot in `lib/gameSlots.js` keeps `wheel` (default true). Room games: `rooms.state.wheel` (spun at `end` / `game_end`, star or not). Stateless games: `/api/wheel` → signed ticket (players, dealt animals, winner, round; 24 h; key = `WHEEL_SECRET` or derived from the DB URL). Phone: localStorage `partygames.wheel.<game>` = the proof for the next start (`{code, token}` or `{ticket}`). No login → no blessed bonus. |
+| **Level labels (v13)** | `lib/content.js` `LEVELS` (`children` shows as **Newbies**; ids/db values unchanged, saved choices keep working) |
 | Audit trail | `audit_log` table (who, action, target, IP, time) |
 | Login rate limiting | `login_throttle` table (per IP) + `users.failed_attempts` / `locked_until` (5 fails → 15 min lock) |
 
@@ -408,6 +418,22 @@ flowchart LR
    Without a star the admin weights are used without the blessed bonus. The winner is the next game's ⭐ Party Star
    (admin default perks) via `prev` — `{code, token}` for rooms (plain rooms: token only; host rooms: token + the
    same login session) or `{ticket}` for stateless games (same group keeps its animals).
+
+19. **Polish (v13)**: setup rows (shared `PlayerRows`, both games): the picked gender glows (filled + ring + ✓,
+   `aria-pressed`) even while the "Pick Male or Female" error shows; the red highlight leaves each row as soon as it
+   has a gender and the error clears when all are set; rows can no longer overflow sideways on narrow phones.
+   Truth or Dare shows every “who” (turn, chicken scores, cards naming a player, Animal Match / Human / Whisper /
+   Chooser surprises, results awards + pairs + titles, the advanced live view) as **animal emoji + name** via
+   `components/party/PlayerTag.js` (gender dot only as a fallback). Results list “Everyone’s title” first.
+   The `children` level is labelled **Newbies** (UI + admin); ids and stored values are unchanged.
+
+```mermaid
+flowchart LR
+  RM[("room.animals<br/>name → {emoji, name, role}")] --> PT["PlayerTag / WithTag<br/>🦊 Leo (dot fallback)"]
+  PT --> T1["turn + chicken scores"] & T2["cards naming a player"] & T3["surprises: match · human · whisper · chooser"] & T4["Results: titles FIRST → awards → pairs → animals"] & T5["advanced live view + history"]
+  PR["PlayerRows (ToD + Race)"] --> G["picked gender: fill + glow ring + ✓<br/>error row red only until picked → onFixed clears error"]
+  LV["LEVELS: id 'children'"] --> NB["label “Newbies” (UI + admin)"]
+```
 
 ### Adding a game: the 🎡 wheel comes for free
 

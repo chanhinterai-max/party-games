@@ -1,4 +1,5 @@
 'use client';
+import { LEVELS } from '@/lib/content';
 import { useState } from 'react';
 import { api } from './api';
 
@@ -75,7 +76,7 @@ export default function CategoryManager({ cats, reload, palette, level }) {
               {generic.map((w) => <label key={w.value}><input type="checkbox" checked={hasWho('generic', w.value)} onChange={() => toggleWho('generic', w.value)} />{w.label}</label>)}
             </div>
           )}
-          <div className="label" style={{ marginTop: 10 }}>WHAT (dares at {level} level)</div>
+          <div className="label" style={{ marginTop: 10 }}>WHAT (dares at {LEVELS.find((l) => l.id === level)?.name || level} level)</div>
           <div className="checks">
             {palette.what.dare.map((w) => <label key={w.id}><input type="checkbox" checked={form.what.includes(w.id)} onChange={() => setForm({ ...form, what: toggle(form.what, w.id) })} />{short(w.text)}</label>)}
           </div>

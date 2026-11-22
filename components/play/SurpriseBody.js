@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Timer from './Timer';
 import Chooser from './Chooser';
+import PlayerTag from '@/components/party/PlayerTag';
 
 const TITLES = {
   match: '🐾 Animal Match · predator & prey',
@@ -27,20 +28,20 @@ function VoteCount() {
 }
 
 // Body of a surprise card (rendered on the amber back face of the flip card).
-export default function SurpriseBody({ sp, players }) {
+export default function SurpriseBody({ sp, players, animals, genders }) { // v13: players = animal emoji + name
   const [peek, setPeek] = useState(false);
   return (
     <>
       <div className="kind" data-surprise-type={sp.type}>✨ Surprise · {TITLES[sp.type] || sp.type}</div>
       {sp.type === 'match' && (
         <div className="match-pair" data-match-pair>
-          <span data-match-a>{sp.a}{sp.pair?.[0] && <small> ({sp.pair[0]})</small>}</span> <span>🐾</span> <span data-match-b>{sp.b}{sp.pair?.[1] && <small> ({sp.pair[1]})</small>}</span>
+          <span data-match-a>{sp.pair?.[0] ? <><PlayerTag name={sp.pair[0]} animals={animals} genders={genders} /> <small>({animals?.[sp.pair[0]]?.name || sp.a})</small></> : sp.a}</span> <span>🐾</span> <span data-match-b>{sp.pair?.[1] ? <><PlayerTag name={sp.pair[1]} animals={animals} genders={genders} /> <small>({animals?.[sp.pair[1]]?.name || sp.b})</small></> : sp.b}</span>
         </div>
       )}
-      {sp.type === 'human' && sp.player && <div className="match-pair" data-human-player>🧍 {sp.player}</div>}
+      {sp.type === 'human' && sp.player && <div className="match-pair" data-human-player><PlayerTag name={sp.player} animals={animals} genders={genders} /></div>}
       {sp.type === 'whisper' ? (
         <>
-          <p className="count">{sp.player ? <><b>{sp.player}</b>: </> : null}peek privately, then whisper a name to the person on your left. The named person can take a sip to hear the question!</p>
+          <p className="count">{sp.player ? <><PlayerTag name={sp.player} animals={animals} genders={genders} bold />: </> : null}peek privately, then whisper a name to the person on your left. The named person can take a sip to hear the question!</p>
           {peek
             ? <div className="text" data-surprise-text>{sp.text}</div>
             : <button type="button" className="small-btn good" data-act="whisper-peek" onClick={() => setPeek(true)}>👀 Peek at the secret question</button>}
@@ -50,7 +51,7 @@ export default function SurpriseBody({ sp, players }) {
         <div className="text" data-surprise-text>{sp.text}</div>
       )}
       {sp.type === 'vote' && <VoteCount />}
-      {sp.type === 'chooser' && <Chooser players={players} />}
+      {sp.type === 'chooser' && <Chooser players={players} animals={animals} genders={genders} />}
       {sp.seconds ? <Timer key={sp.id} seconds={sp.seconds} /> : null}
     </>
   );

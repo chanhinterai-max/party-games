@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from './api';
 import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
-import GenderDot, { WithDot } from './GenderDot';
+import GenderDot from './GenderDot';
+import PlayerTag, { WithTag } from '@/components/party/PlayerTag'; // v13: animal emoji + name
 import dynamic from 'next/dynamic';
 import Results from './Results';
 
@@ -185,7 +186,7 @@ export default function QueueEditor({ code }) {
   const chip = (field, value, label, from = null, extra = '') => (
     <span className={`chip ${field} ${extra}`} data-chip={field}
       onPointerDown={(e) => startDrag(e, { kind: 'field', field, value, from }, label, `chip ${field}`)}>
-      {field === 'who' && value?.kind === 'player' && <GenderDot gender={genders[value.value]} />}{label}
+      {field === 'who' && value?.kind === 'player' && (room.animals?.[value.value]?.emoji ? <span className="ptag-emoji" aria-hidden="true">{room.animals[value.value].emoji}</span> : <GenderDot gender={genders[value.value]} />)}{label}
     </span>
   );
 
@@ -237,14 +238,14 @@ export default function QueueEditor({ code }) {
 
       <div className="live-card section" data-live>
         <div className="label">Live · turn {room.turn} · <span data-live-left>{room.questionsLeft}/{room.total} questions left</span></div>
-        <div><strong data-live-current><GenderDot gender={genders[room.current]} />{room.current}</strong>’s turn</div>
-        {room.card ? <p data-live-card style={{ margin: '8px 0 0' }}>{room.card.type === 'truth' ? '🤫' : '🔥'} <WithDot text={room.card.text} name={room.card.whoRef?.kind === 'player' ? room.card.who : null} gender={genders[room.card.who]} /></p> : <p className="count" style={{ margin: '8px 0 0' }}>Choosing Truth or Dare…</p>}
+        <div><strong data-live-current><PlayerTag name={room.current} animals={room.animals} genders={genders} /></strong>’s turn</div>
+        {room.card ? <p data-live-card style={{ margin: '8px 0 0' }}>{room.card.type === 'truth' ? '🤫' : '🔥'} <WithTag text={room.card.text} name={room.card.whoRef?.kind === 'player' ? room.card.who : null} animals={room.animals} genders={genders} /></p> : <p className="count" style={{ margin: '8px 0 0' }}>Choosing Truth or Dare…</p>}
         {room.lastChicken && <p className="count" data-live-chicken style={{ margin: '6px 0 0' }}>🐔 {room.lastChicken.player} chickened out: {DRINK_CATEGORIES.find((c) => c.id === room.lastChicken.category)?.name} · {room.lastChicken.text}</p>}
         <details style={{ marginTop: 10 }}>
           <summary className="count">History ({room.history.length})</summary>
           <ul className="history" style={{ marginTop: 8 }}>
             {room.history.map((h, i) => (
-              <li key={i}><div className="meta">#{h.turn} · {h.result === 'surprise' ? `✨ Surprise · ${h.stype}` : <><GenderDot gender={genders[h.player]} />{h.player}</>} · {h.result === 'surprise' ? '' : h.result === 'chicken' ? `🐔 chickened out → ${h.drink?.text || ''}` : h.result === 'drank' ? '🍻 drank' : '✓ done'}</div>{h.text || '(passed)'}</li>
+              <li key={i}><div className="meta">#{h.turn} · {h.result === 'surprise' ? `✨ Surprise · ${h.stype}` : <PlayerTag name={h.player} animals={room.animals} genders={genders} />} · {h.result === 'surprise' ? '' : h.result === 'chicken' ? `🐔 chickened out → ${h.drink?.text || ''}` : h.result === 'drank' ? '🍻 drank' : '✓ done'}</div>{h.text || '(passed)'}</li>
             ))}
           </ul>
         </details>

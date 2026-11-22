@@ -1,4 +1,5 @@
 'use client';
+import { LEVELS } from '@/lib/content';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/components/api';
@@ -130,7 +131,7 @@ export default function Admin() {
           {rooms.map((r) => (
             <tr key={r.code}>
               <td><Link href={`/room/${r.code}`}><strong style={{ fontFamily: 'ui-monospace, monospace' }}>{r.code}</strong></Link></td>
-              <td>{r.level} · {r.players.length} players<div className="count">now: {r.current} · {r.turns} turns · {r.questionsLeft} left</div></td>
+              <td>{LEVELS.find((l) => l.id === r.level)?.name || r.level} · {r.players.length} players<div className="count">now: {r.current} · {r.turns} turns · {r.questionsLeft} left</div></td>
               <td className="count">{new Date(r.lastActivity || r.updatedAt).toLocaleTimeString()}</td>
             </tr>
           ))}

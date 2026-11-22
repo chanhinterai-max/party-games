@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/components/api';
 import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
-import GenderDot, { WithDot } from '@/components/GenderDot';
+import PlayerTag, { WithTag } from '@/components/party/PlayerTag';
 import dynamic from 'next/dynamic';
 import RunningAnimals from '@/components/RunningAnimals';
 
@@ -189,7 +189,7 @@ export default function TruthOrDare() {
             <div className="label" style={{ margin: 0 }}>Who’s playing?</div>
             <div className="count" style={{ textAlign: 'right' }}>{players.length} / {MAX}</div>
           </div>
-          <PlayerRows players={players} setPlayers={setPlayers} missing={missing} />
+          <PlayerRows players={players} setPlayers={setPlayers} missing={missing} onFixed={() => { setMissing([]); setError(''); }} />
         </div>
         <div className="section">
           <div className="label">Level</div>
@@ -288,7 +288,7 @@ export default function TruthOrDare() {
         ) : (
           <>
             <div className="pass">{flipped ? 'Your card' : 'Pass the phone to'}</div>
-            <div className="who"><GenderDot gender={g[room.current]} />{room.current}{flipped ? '' : '’s turn'}</div>
+            <div className="who"><PlayerTag name={room.current} animals={room.animals} genders={g} />{flipped ? '' : '’s turn'}</div>
           </>
         )}
       </div>
@@ -308,13 +308,13 @@ export default function TruthOrDare() {
               <>
                 <div className="kind" data-human-card={card.human ? '1' : undefined}>{card.type === 'truth' ? '🤫 Truth' : '🔥 Dare'}{card.human ? ' · 🧍 Human card' : ''}</div>
                 <div className="text card-in" data-card-text key={card.itemId}>
-                  <WithDot text={card.text} name={card.whoIsPlayer || card.whoRef?.kind === 'player' ? card.who : null} gender={g[card.who]} />
+                  <WithTag text={card.text} name={card.whoIsPlayer || card.whoRef?.kind === 'player' ? card.who : null} animals={room.animals} genders={g} />
                 </div>
                 {card.seconds ? <Timer key={`timer-${card.itemId}`} seconds={card.seconds} /> : null}
               </>
             ) : (
               <>
-                <SurpriseBody key={sp.id} sp={sp} players={room.players} />
+                <SurpriseBody key={sp.id} sp={sp} players={room.players} animals={room.animals} genders={g} />
               </>
             )}
           </div>
@@ -355,7 +355,7 @@ export default function TruthOrDare() {
         <AnimalList players={room.players} animals={room.animals} genders={g} star={room.star} />
       </details>
       <div className="scores" aria-label="Chicken-outs">
-        {room.players.map((p) => <span key={p}><GenderDot gender={g[p]} />{p}{room.star?.player === p ? ' ⭐' : ''} · {room.sips?.[p] || 0} 🐔</span>)}
+        {room.players.map((p) => <span key={p}><PlayerTag name={p} animals={room.animals} genders={g} />{room.star?.player === p ? ' ⭐' : ''} · {room.sips?.[p] || 0} 🐔</span>)}
       </div>
       <StarAnnounce star={room.star} />
       <div className="section row">

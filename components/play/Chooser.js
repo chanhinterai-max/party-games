@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import PlayerTag from '@/components/party/PlayerTag';
 
 // Dare Chooser: everyone puts a finger on the pad; after 2 s still, one finger is picked at random.
 // Fallback (no multi-touch): tap names to join, then Pick.
 const HOLD_MS = 2000;
-export default function Chooser({ players }) {
+export default function Chooser({ players, animals, genders }) { // v13: names shown as animal emoji + name
   const [touches, setTouches] = useState({}); // pointerId -> {x, y}
   const [chosen, setChosen] = useState(null); // pointerId (string) or { name }
   const [joined, setJoined] = useState([]);
@@ -46,12 +47,12 @@ export default function Chooser({ players }) {
           <i key={id} className={`finger ${chosen === id ? 'win' : chosen ? 'lose' : ''}`} style={{ transform: `translate(${touches[id].x - 36}px, ${touches[id].y - 36}px)` }} />
         ))}
       </div>
-      {chosen && <p className="chosen" data-chosen>{typeof chosen === 'object' ? `👉 ${chosen.name} is the chosen one!` : '👉 The glowing finger is the chosen one!'}</p>}
+      {chosen && <p className="chosen" data-chosen>{typeof chosen === 'object' ? <>👉 <PlayerTag name={chosen.name} animals={animals} genders={genders} /> is the chosen one!</> : '👉 The glowing finger is the chosen one!'}</p>}
       <div className="label" style={{ marginTop: 10 }}>No multi-touch? Tap to join</div>
       <div className="chips">
         {players.map((p) => (
           <button type="button" key={p} className="chip" aria-pressed={joined.includes(p)} data-join={p} disabled={!!chosen}
-            onClick={() => setJoined((j) => (j.includes(p) ? j.filter((x) => x !== p) : [...j, p]))}>{joined.includes(p) ? '✓ ' : ''}{p}</button>
+            onClick={() => setJoined((j) => (j.includes(p) ? j.filter((x) => x !== p) : [...j, p]))}>{joined.includes(p) ? '✓ ' : ''}<PlayerTag name={p} animals={animals} genders={genders} /></button>
         ))}
       </div>
       <div className="row" style={{ marginTop: 8 }}>

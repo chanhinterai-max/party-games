@@ -133,7 +133,7 @@ export default function AnimalRace() {
             <div className="label" style={{ margin: 0 }}>Who’s racing?</div>
             <div className="count" style={{ textAlign: 'right' }}>{players.length} / {MAX}</div>
           </div>
-          <PlayerRows players={players} setPlayers={setPlayers} missing={missing} />
+          <PlayerRows players={players} setPlayers={setPlayers} missing={missing} onFixed={() => { setMissing([]); setError(''); }} />
         </div>
         {host && <p className="host-note" data-host-note>🎛️ New race room under your login (from your Rooms page). Your session’s ⭐ player is shown to everyone with a badge and a perk list.</p>}
         <div className="mode-pick" role="group" aria-label="Mode">
