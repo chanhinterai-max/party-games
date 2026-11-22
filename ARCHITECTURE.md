@@ -113,6 +113,13 @@ party-games/
 │           ├── games/route.js        GET/PATCH home-page game toggles
 │           ├── rooms/route.js        GET live rooms (last 12h)
 │           └── audit/route.js        GET last 100 audit entries
+│   ├── me/page.js                    v14 👤 MY PROFILE (advanced/admin): username read-only, game name (1-24), favourite animal
+│   │                                 (20-animal grid), recovery email, picture (compressed on the phone, ≤ 15 KB)
+│   ├── forgot/page.js                v14 🔑 password reset by EMAIL CODE (says “not set up” when no email provider)
+│   ├── api/me/profile, api/me/avatar v14 GET/PUT profile · PUT raw WebP/JPEG bytes (≤ 30 KB, magic-byte check) / DELETE
+│   ├── api/avatar/[key]              v14 picture bytes by opaque key (new key per upload → immutable cache)
+│   ├── api/auth/forgot, api/auth/reset  v14 request code (generic answer) · confirm code + new password
+│   ├── api/admin/users/[id] PATCH    v14 admin renames an ADVANCED user's username (409 if taken)
 ├── components/
 │   ├── AuthButton.js                 Login / user menu (top-right)
 │   ├── QueueEditor.js                Drag-and-drop WHO/WHAT/WHERE editor + category filter
@@ -179,6 +186,9 @@ party-games/
 │   ├── admin/RaceSettingsPanel.js    v10: race tunables form (save / reset to defaults)
 │   ├── admin/OddsPanel.js            Chicken odds + hidden rule (pet-rule target select)
 │   └── api.js                        fetch helper
+│   ├── party/pics.js                 v14 setPics(room.pics) store + <Face> = picture (lazy, async decode) or emoji fallback
+│   ├── party/useOwnPlayer.js         v14 host room → my game name as the FIRST, locked PlayerRows row
+│   ├── party/compressAvatar.js       v14 canvas centre-crop 128/96 px, WebP→JPEG, q 0.7→0.4, target ≤ 15 KB
 ├── lib/                              ── server-side logic
 │   ├── partystar.js                  SERVER: settings `party_star` {label, perks, wheel}, session match, resolveRoomStar (v12: blessed + star),
 │   │                                 v12: loadPrevRoom (own room, same session, token), hasQuiet, spinWheel (crypto), publicWheel
@@ -258,6 +268,8 @@ party-games/
 │   ├── gameSlots.js                  v12b CLIENT-SAFE game registry (add new games here; Animal Race = slot 2): wheel flag
 │   │                                 (default true) + wheelFrom 'ranking' (default) | 'room' (ToD) → wheelOn(), wheelFrom()
 │   └── http.js                       JSON responses, Origin (CSRF) check, input validation, errors
+│   ├── profile.js                    v14 profiles (user_profiles), picture checks, ownerOf()/ownerFirst() = host's own player
+│   ├── reset.js                      v14 email-code reset: hashed 6-digit code, 15 min, 3 codes/15 min/account, 5 tries, Resend API
 ├── next.config.mjs                   Security headers (HSTS, nosniff, frame deny, …)
 ├── .env.example                      Names of required env vars (no real values)
 ├── ARCHITECTURE.md                   This file
@@ -298,6 +310,9 @@ party-games/
 | **🍀 Blessed + 🎡 wheel (v12)** | Blessed = first player matching the session name (`rooms.party_star.blessed`, never public): quiet drinks/luck/race perks. Star = `rooms.party_star.player` (game 1 = blessed; then the previous room's `state.wheel.winner`). Wheel weights: `settings.party_star.wheel` (Admin → ⭐ Star player). Spin: `lib/partystar.js` spinWheel at ToD end / race `race_end`; shown by `components/party/StarWheel.js` |
 | **🎡 End-of-game wheel (v12b)** | EVERY game whose slot in `lib/gameSlots.js` keeps `wheel` (default true). Room games: `rooms.state.wheel` (spun at `end` / `game_end`, star or not). Stateless games: `/api/wheel` → signed ticket (players, dealt animals, winner, round; 24 h; key = `WHEEL_SECRET` or derived from the DB URL). Phone: localStorage `partygames.wheel.<game>` = the proof for the next start (`{code, token}` or `{ticket}`). No login → no blessed bonus. |
 | **Level labels (v13)** | `lib/content.js` `LEVELS` (`children` shows as **Newbies**; ids/db values unchanged, saved choices keep working) |
+| **👤 Profiles (v14)** | `user_profiles` (user_id → game_name, fav_animal, email (unique, case-insensitive), avatar BYTEA ≤ 30 KB + avatar_type + avatar_key). Picture served by `/api/avatar/<key>` (public, immutable; browser 1 y, CDN 1 d). `lib/profile.js` |
+| **🏠 Host's own player (v14)** | Host room by a signed-in advanced/admin user with a game name → that name is player 1 (keeps the favourite animal; others rebalanced 1:1 in `lib/animals.js` `assignAnimals(…, fixed)`), linked by `rooms.party_star.ownerUid` (never public). Quiet blessed perks + wheel bonus by the LINK only; `room.pics` / race `pics` = `{gameName: pictureUrl}` |
+| **🔑 Password reset (v14)** | `password_resets` (sha256 of uid+code, expires_at 15 min, used_at, attempts); advanced users with a recovery email only (admins never); `lib/reset.js` |
 | Audit trail | `audit_log` table (who, action, target, IP, time) |
 | Login rate limiting | `login_throttle` table (per IP) + `users.failed_attempts` / `locked_until` (5 fails → 15 min lock) |
 
@@ -309,6 +324,9 @@ party-games/
 | `PGHOST`, `PGHOST_UNPOOLED`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Also added by Neon; not used by the app directly |
 | `ADMIN_SETUP_SECRET` | Long random secret required by `/api/setup` to create the first admin (one time) |
 | `WHEEL_SECRET` (optional, v12b) | HMAC key for the stateless wheel tickets; if unset it is derived (SHA-256) from the database URL, which is already a server-only secret |
+| `RESEND_API_KEY` (v14, needed for reset) | Resend API key for the password-reset email. Unset → /forgot says reset isn't set up (API 503) |
+| `RESET_FROM` (v14, needed for reset) | Verified Resend sender, e.g. `Party Animal <no-reply@your-domain>` |
+| `RESET_EMAIL_API_URL` (test only) | Overrides the Resend endpoint for local tests (mock provider); leave unset in production |
 
 ## Request flow
 
@@ -435,6 +453,31 @@ flowchart LR
   LV["LEVELS: id 'children'"] --> NB["label “Newbies” (UI + admin)"]
 ```
 
+20. **Profiles (v14)**: advanced users edit their profile on `/me` (username read-only; only the admin renames
+   usernames on /admin). The picture is cropped/compressed on the phone (canvas → ~128 px WebP/JPEG ≤ 15 KB) and the
+   server re-checks type (magic bytes: WebP/JPEG only → 415) and size (> 30 KB → 413), stores it in Postgres and
+   serves it by a fresh opaque key with immutable caching. When the user creates a host room (ToD or race) with a game
+   name set, `useOwnPlayer` puts that name first (locked row); the server (`ownerOf`) re-checks it against the
+   signed-in creator, deals the favourite animal (1:1 split kept by rebalancing the others) and links the player by
+   account id (`ownerUid`, server-only). Only that linked player gets the quiet blessed perks + wheel bonus and the
+   picture (`<Face>` in PlayerTag, Animals box, race lane button + canvas sprite, results, champion, wheel legend;
+   emoji fallback). The same name typed in any other room is just a name. Password reset: `/forgot` → 6-digit code by
+   email (Resend) → new password; generic answers, per-IP + per-account limits, sessions revoked on success.
+
+```mermaid
+flowchart LR
+  ME["/me (profile + picture)"] -->|"PUT ≤30 KB webp/jpeg"| UP[("user_profiles")]
+  UP --> AV["/api/avatar/key<br/>immutable cache"]
+  HOST["host room create<br/>(ToD /api/rooms · race /api/race/start)"] --> OW["ownerOf(session user, host, names)"]
+  UP --> OW
+  OW --> P1["player 1 = game name<br/>fav animal · others rebalanced"]
+  OW --> LNK["party_star.ownerUid (server-only)"]
+  LNK --> PK["quiet perks + wheel bonus"]
+  OW --> PICS["room.pics {name: url}"] --> FACE["Face: tag · animals · lanes · sprite · results · wheel"]
+  IMP["same name elsewhere"] -.->|no link| NONE["no perks, no picture"]
+  FG["/forgot"] --> RS["lib/reset.js: hashed code 15 min"] -->|Resend| MAIL["recovery email"]
+```
+
 ### Adding a game: the 🎡 wheel comes for free
 
 1. Add the slot in `lib/gameSlots.js` (`wheel` defaults to true; set `wheel: false` to opt out).
@@ -485,4 +528,5 @@ flowchart TB
 - Role checks on every protected API route on the server; disabling a user or resetting a password deletes their sessions.
 - Parameterized SQL only; all inputs validated (names, levels, queue items, WHERE limited to an allow-list).
 - Admin account changes (username/password) require the current password; a password change signs out other sessions.
+- v14: profile pictures are type-sniffed (WebP/JPEG only) and size-limited on the server, served with nosniff + `default-src 'none'`; reset codes are hashed, single-use, 15 min, limited per IP/account; reset responses never reveal whether an account exists; admins cannot be reset by email.
 - First admin only via `ADMIN_SETUP_SECRET`, and only while no admin exists.

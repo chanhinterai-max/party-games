@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { Face } from './pics'; // v14: the host's picture next to their slice
 
 // v12 🎡 next-Party-Star wheel. The SERVER already picked the winner (crypto, weighted); this only animates:
 // one CSS transform transition on a single SVG (GPU-composited, no per-frame JS) landing inside the winner's slice.
@@ -47,9 +48,9 @@ export default function StarWheel({ wheel, label = 'Party Star', onDone }) {
         </svg>
       </div>
       <ul className="wheel-legend">
-        {arcs.map((a) => <li key={a.player} data-slice={a.player} data-pct={a.pct}><i style={{ background: a.color }} />{a.player} <small>{Math.round(a.pct)}%{a.tags.map((t) => TAG[t]).join('')}</small></li>)}
+        {arcs.map((a) => <li key={a.player} data-slice={a.player} data-pct={a.pct}><i style={{ background: a.color }} /><Face name={a.player} emoji={null} size={18} className="wf" />{a.player} <small>{Math.round(a.pct)}%{a.tags.map((t) => TAG[t]).join('')}</small></li>)}
       </ul>
-      <p className={`wheel-result ${done ? 'show' : ''}`} data-wheel-result role="status">{done ? <>⭐ Next {label}: <b>{wheel.winner}</b></> : 'Spinning…'}</p>
+      <p className={`wheel-result ${done ? 'show' : ''}`} data-wheel-result role="status">{done ? <>⭐ Next {label}: <b><Face name={wheel.winner} emoji={null} size={22} className="wf" />{wheel.winner}</b></> : 'Spinning…'}</p>
       <p className="count">🔥 most dares done = bigger slice · 🐔 most chicken-outs = smallest · 🥇🥈🥉 podium = bigger slice</p>
     </section>
   );

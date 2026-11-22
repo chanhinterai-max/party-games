@@ -1,4 +1,5 @@
 import GenderDot from '@/components/GenderDot';
+import { Face } from './pics';
 
 // v13 SHARED "who": the player's animal emoji + name (Truth or Dare pairs, cards, surprises, results, live view).
 // Falls back to the blue/pink gender dot when the player has no animal (older rooms).
@@ -7,7 +8,7 @@ export default function PlayerTag({ name, animals, genders, bold = false }) {
   const N = bold ? <b>{name}</b> : name;
   return (
     <span className="ptag" data-ptag={name}>
-      {a?.emoji ? <span className="ptag-emoji" role="img" aria-label={a.name || 'animal'} data-ptag-animal={a.id || a.name}>{a.emoji}</span> : <GenderDot gender={genders?.[name]} />}{N}
+      {a?.emoji ? <span className="ptag-emoji" role="img" aria-label={a.name || 'animal'} data-ptag-animal={a.id || a.name}><Face name={name} emoji={a.emoji} size={20} /></span> : <GenderDot gender={genders?.[name]} />}{N}
     </span>
   );
 }

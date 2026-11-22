@@ -32,7 +32,7 @@ export default function RoomEntry() {
     {editor && (
       <section className="panel" data-section="create-room" style={{ marginTop: 30 }}>
         <h3>➕ Create a new room</h3>
-        <p className="count">Starts the game on this device and saves the room under your name.</p>
+        <p className="count">Starts the game on this device and saves the room under your name. You join as the first player (game name, animal and picture from <Link href="/me" data-act="my-profile">👤 My profile</Link>).</p>
         <div className="create-grid">
           <Link className="btn btn-primary" href="/play/truth-or-dare?host=1" data-act="create-tod">🎭 New Truth or Dare room</Link>
           <Link className="btn btn-primary" href="/play/animal-race?host=1" data-act="create-race">🏁 New Animal Race room</Link>

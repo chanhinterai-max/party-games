@@ -34,6 +34,7 @@ export default function AuthButton() {
         <div className="menu" role="menu">
           <div className="who">Signed in as {user.role === 'admin' ? 'Admin' : 'Advanced player'}</div>
           <Link href="/room">🎛️ Rooms & queue editor</Link>
+          <Link href="/me">👤 My profile</Link>
           {user.role === 'admin' && <Link href="/admin">🛡️ Admin dashboard</Link>}
           <button onClick={logout}>🚪 Log out</button>
         </div>

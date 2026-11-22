@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { api } from '@/components/api';
 import { LEVELS, DRINK_CATEGORIES } from '@/lib/content';
 import PlayerTag, { WithTag } from '@/components/party/PlayerTag';
+import useOwnPlayer from '@/components/party/useOwnPlayer';
+import { setPics } from '@/components/party/pics';
 import dynamic from 'next/dynamic';
 import RunningAnimals from '@/components/RunningAnimals';
 
@@ -46,6 +48,8 @@ export default function TruthOrDare() {
   const [toast, setToast] = useState('');
   const [reveal, setReveal] = useState(null);
   const [host, setHost] = useState(false); // v11: opened from an advanced user's Rooms page (?host=1) → room saved under their login
+  useOwnPlayer(host, setPlayers); // v14: host room → my game name is the first (locked) player
+  useEffect(() => { setPics(room?.pics); }, [room?.pics]); // v14: host's picture instead of their animal emoji
   const toastTimer = useRef();
   const [petMs, setPetMs] = useState(20000);
   const petted = useRef({}); // id -> pet start (performance.now())

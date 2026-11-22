@@ -2,6 +2,7 @@
 import GenderDot from '@/components/GenderDot';
 import { RACE } from '@/lib/race/config';
 import StarBadge from '@/components/party/StarBadge';
+import { Face } from '@/components/party/pics';
 
 const MEDAL = ['🥇', '🥈', '🥉', '4'];
 // Heat / final podium. Last place (ties all) drinks — the only drinking rule in Animal Race.
@@ -16,7 +17,7 @@ export default function RaceResults({ result, animals, genders, title, star }) {
           return (
             <li key={o.name} className={`podium-row place-${o.place}`} data-place={o.place} data-podium={o.name}>
               <span className="medal">{MEDAL[o.place - 1] || o.place}</span>
-              <span className="animal-emoji">{a?.role === 'human' ? '🧍' : a?.emoji}</span>
+              <span className="animal-emoji"><Face name={o.name} emoji={a?.role === 'human' ? '🧍' : a?.emoji} size={32} /></span>
               <span className="animal-who"><b><GenderDot gender={genders[o.name]} />{o.name}{star?.player === o.name && <StarBadge label={star.label} />}</b>
                 <span className="dist"><i style={{ width: `${pct}%` }} /></span></span>
             </li>

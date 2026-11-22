@@ -54,6 +54,11 @@ export default function Admin() {
     });
   };
   const toggleUser = (u) => run(() => api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { enabled: !u.enabled } }));
+  const renameUser = (u) => { // v14: only the admin renames usernames
+    const name = window.prompt(`New username for ${u.username} (3-32: letters, digits, _ . -)`, u.username);
+    if (!name || name.trim() === u.username) return;
+    run(() => api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { username: name.trim() } }));
+  };
   const resetPw = (u) => run(async () => {
     if (!confirm(`Reset password for ${u.username}? Their sessions will be signed out.`)) return;
     const d = await api(`/api/admin/users/${u.id}/password`, { method: 'POST', body: {} });
@@ -98,6 +103,7 @@ export default function Admin() {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {u.id !== me.id && <button className={`small-btn ${u.enabled ? 'danger' : 'good'}`} data-act="toggle-user" onClick={() => toggleUser(u)}>{u.enabled ? 'Disable' : 'Enable'}</button>}{' '}
                   <button className="small-btn" data-act="reset-pw" onClick={() => resetPw(u)}>Reset pw</button>
+                  {u.role === 'advanced' && <>{' '}<button className="small-btn" data-act="rename-user" onClick={() => renameUser(u)}>Rename</button></>}
                   {u.role === 'advanced' && <>{' '}<button className="small-btn danger" data-act="delete-user" onClick={() => deleteUser(u)}>Delete</button></>}
                 </td>
               </tr>

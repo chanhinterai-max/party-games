@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api } from '@/components/api';
 
 export default function Login() {
@@ -37,6 +38,7 @@ export default function Login() {
       </label>
       <div className="error" role="alert">{error}</div>
       <button className="btn btn-primary" disabled={busy} type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
+      <p className="count" style={{ textAlign: 'center', marginTop: 12 }}><Link href="/forgot" data-act="forgot">Forgot password?</Link></p>
     </form>
   );
 }

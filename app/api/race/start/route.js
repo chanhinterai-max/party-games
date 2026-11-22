@@ -5,7 +5,8 @@ import { listPool } from '@/lib/surprises';
 import { assignAnimals, publicAnimals } from '@/lib/animals';
 import { getRaceTune } from '@/lib/settings';
 import { getUser, audit, throttle } from '@/lib/auth';
-import { resolveRoomStar, publicStar, loadPrev, hasQuiet, signTicket } from '@/lib/partystar';
+import { resolveRoomStar, publicStar, publicPics, loadPrev, hasQuiet, signTicket } from '@/lib/partystar';
+import { ownerOf, ownerFirst } from '@/lib/profile';
 
 // ANIMAL RACE start: ONE request before the first race. Validates the players, checks the admin game switch, and
 // deals Party Animal roles + unique pool animals (same rules as Truth or Dare). Everything after this runs on the
@@ -14,15 +15,19 @@ import { resolveRoomStar, publicStar, loadPrev, hasQuiet, signTicket } from '@/l
 export const POST = route(async (req) => {
   const body = await readJson(req, 8 * 1024);
   if (!(await isGameEnabled('animal-race'))) throw new HttpError(403, 'This game is currently disabled');
-  const { names, genders } = validatePlayers(body.players);
+  const { names: entered, genders } = validatePlayers(body.players);
   const [pool, tune] = await Promise.all([listPool(), getRaceTune()]);
   const user = body.host === true ? await getUser(req) : null;
+  // v14: the host's own player (game name, linked by account id) first, with their favourite animal + picture; blessed
+  const owner = ownerOf(user, body.host === true, entered);
+  const names = ownerFirst(entered, owner);
   // v12 "Again": same group → keep the animals, the wheel winner becomes the Party Star. v12b: EVERY race — a hosted
   // room proves it with {code, token}, a plain (stateless) race with the signed {ticket} from /api/wheel.
   const prev = body.prev ? await loadPrev(user, body.prev, 'animal-race') : null;
   const same = prev?.animals && prev.players.length === names.length && names.every((n) => prev.players.includes(n) && prev.animals[n]);
-  const raw = same ? structuredClone(prev.animals) : assignAnimals(names, pool);
-  const { creator, star } = await resolveRoomStar(user, body.host === true, 'animal-race', names, genders, prev);
+  const fixed = owner?.fav ? { name: owner.name, id: owner.fav } : null;
+  const raw = same ? structuredClone(prev.animals) : assignAnimals(names, pool, fixed);
+  const { creator, star } = await resolveRoomStar(user, body.host === true, 'animal-race', names, genders, prev, owner);
   if (star?.perks?.raceNoHumanOn) { // never the Human: star AND blessed (swap the Human role with a random other player)
     const hum = names.find((n) => raw[n]?.role === 'human');
     if (hum && hasQuiet(star, hum)) {
@@ -46,5 +51,5 @@ export const POST = route(async (req) => {
   // v12b: a plain race has no room → a signed ticket (players + dealt animals + star round) stands in for it at the
   // end-of-game wheel (/api/wheel) and the next "Again"
   const ticket = room ? null : signTicket({ g: 'animal-race', p: names, a: raw, r: star?.round || 0 });
-  return json({ players: names, genders, animals, tune, star: publicStar(star), boost, ...(room ? { room: { code: room.code, token: room.token } } : { ticket }) });
+  return json({ players: names, genders, animals, tune, star: publicStar(star), pics: publicPics(star), boost, ...(room ? { room: { code: room.code, token: room.token } } : { ticket }) });
 }, { mutation: true });

@@ -10,6 +10,8 @@ import StarAnnounce from '@/components/party/StarAnnounce';
 import StarBadge from '@/components/party/StarBadge';
 import EndWheel from '@/components/party/EndWheel';
 import useEndWheel from '@/components/party/useEndWheel';
+import useOwnPlayer from '@/components/party/useOwnPlayer';
+import { setPics, Face } from '@/components/party/pics';
 import { STORE_PLAYERS, MAX, blank, save, loadPlayers, checkPlayers } from '@/components/party/store';
 import { makeHeats, needsFinal } from '@/lib/race/heats';
 
@@ -47,8 +49,10 @@ export default function AnimalRace() {
   const [cur, setCur] = useState(0);        // index of the race being run (heats..., then final)
   const [mode, setMode] = useState('normal'); // normal | adult
   const [host, setHost] = useState(false);    // v11: opened from an advanced user's Rooms page (?host=1)
+  useOwnPlayer(host, setPlayers); // v14: host room → my game name is the first (locked) player
   const end = useEndWheel('animal-race');     // v12b 🎡 shared end-of-game wheel (every race, room or not)
 
+  useEffect(() => { setPics(game?.pics); }, [game?.pics]); // v14: host's picture instead of their animal emoji
   useEffect(() => { if (new URLSearchParams(window.location.search).get('host') === '1') setHost(true); const p = loadPlayers(); if (p) setPlayers(p); try { if (localStorage.getItem(MODE_KEY) === 'adult') setMode('adult'); } catch {} }, []);
   const pickMode = (m) => { setMode(m); try { localStorage.setItem(MODE_KEY, m); } catch {} };
 
@@ -152,7 +156,7 @@ export default function AnimalRace() {
     );
   }
 
-  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100, star: game.star?.player === n, boost: game.boost?.[n] || null }));
+  const racersOf = (names) => names.map((n) => ({ name: n, role: game.animals[n]?.role || 'prey', emoji: game.animals[n]?.emoji || '🐾', gender: game.genders?.[n], speed: game.animals[n]?.speed ?? 100, star: game.star?.player === n, boost: game.boost?.[n] || null, pic: game.pics?.[n] || null }));
 
   if (phase === 'meet') {
     const cnt = (r) => Object.values(game.animals).filter((a) => a.role === r).length;
@@ -206,7 +210,7 @@ export default function AnimalRace() {
       <Top />
       <div className="champion" data-champion={champ}>
         <div className="crown" aria-hidden="true">👑</div>
-        <div className="champ-animal">{a?.role === 'human' ? '🧍' : a?.emoji}</div>
+        <div className="champ-animal"><Face name={champ} emoji={a?.role === 'human' ? '🧍' : a?.emoji} size={96} /></div>
         <div className="champ-name">{champ}{game.star?.player === champ && <StarBadge label={game.star.label} />}</div>
         <div className="champ-title">Party Animal</div>
       </div>

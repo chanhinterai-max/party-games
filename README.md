@@ -13,7 +13,8 @@ Next.js on Vercel with Postgres (Neon). See [ARCHITECTURE.md](./ARCHITECTURE.md)
 ## Roles
 - **Anyone**: pick a game, enter names, play. Each game gets a room code.
 - **Advanced player** (login): open a room by code, watch live, drag-and-drop edit the upcoming questions.
-- **Admin** (login): everything above + manage advanced users, enable/disable games, list live rooms, audit log.
+- **Admin** (login): everything above + manage advanced users (create, rename, disable), enable/disable games, list live rooms, audit log.
+- v14 **My profile** (`/me`, advanced): game name, favourite animal, recovery email and a small picture. In rooms they create, they join as player 1 with that name/animal/picture. Forgot password → code by email (needs `RESEND_API_KEY` + `RESET_FROM`).
 
 ## Run locally
 ```bash

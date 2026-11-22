@@ -10,7 +10,7 @@ import { spinWheel, publicWheel, verifyTicket, signTicket } from '@/lib/partysta
 const cleanNames = (arr) => {
   if (!Array.isArray(arr) || arr.length < 2 || arr.length > 16) throw new HttpError(400, 'players must list 2-16 names');
   const names = arr.map((n) => (typeof n === 'string' ? n : n?.name)).map((n) => (typeof n === 'string' ? n.trim() : ''));
-  if (names.some((n) => !n || n.length > 20 || /[<>{}]/.test(n)) || new Set(names.map((n) => n.toLowerCase())).size !== names.length) throw new HttpError(400, 'Invalid player names');
+  if (names.some((n) => !n || n.length > 24 || /[<>{}]/.test(n)) || new Set(names.map((n) => n.toLowerCase())).size !== names.length) throw new HttpError(400, 'Invalid player names');
   return names;
 };
 

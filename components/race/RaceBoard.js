@@ -161,6 +161,21 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
     cv.width = Math.round(lay.w * dpr); cv.height = Math.round(lay.h * dpr);
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); const fg = g;
     const sp = spriteCache(dpr);
+    // v14: the host's profile picture replaces their animal emoji on the board (round sprite, cached; emoji until loaded)
+    const pimg = {}; for (const r of racers) if (r.pic) { const im = new Image(); im.decoding = 'async'; im.src = r.pic; pimg[r.name] = im; }
+    const pcache = new Map();
+    if (typeof window !== 'undefined') window.__racePics = Object.keys(pimg); // read-only test hook
+    const picSp = (name, px) => {
+      const im = pimg[name]; if (!im || !im.complete || !im.naturalWidth) return null;
+      const k = `${name}|${px}`; let c = pcache.get(k);
+      if (!c) {
+        const s2 = Math.ceil(px * 1.1 * dpr); c = document.createElement('canvas'); c.width = s2; c.height = s2; const x = c.getContext('2d');
+        x.beginPath(); x.arc(s2 / 2, s2 / 2, s2 / 2 - dpr, 0, Math.PI * 2); x.closePath(); x.save(); x.clip(); x.drawImage(im, 0, 0, s2, s2); x.restore();
+        x.lineWidth = 2 * dpr; x.strokeStyle = 'rgba(255,255,255,.9)'; x.stroke(); c._px = s2 / dpr; pcache.set(k, c);
+      }
+      return c;
+    };
+    const face = (ln, emo, px) => (ln.role !== 'human' && emo === ln.emoji && picSp(ln.name, px)) || sp(emo, px);
     // night = its own LOW-RES canvas layer (1/2 px), scaled up by the compositor: no full-screen blend in the main canvas
     const night = nightRef.current; const NS = 2; night.width = Math.ceil(lay.w / NS); night.height = Math.ceil(lay.h / NS); const ng = night.getContext('2d'); ng.setTransform(1 / NS, 0, 0, 1 / NS, 0, 0);
     const sky = skyRef.current, icon = iconRef.current, frz = freezeRef.current, ban = bannerRef.current; let skyA = -1, iconTxt = null, nightOn = false, frzTxt = null, banTxt = null;
@@ -253,11 +268,11 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
         const p = trackPoint(ln.geo, ln.disp); const rot = ln.geo.rot ? Math.PI : 0;
         const moving = now >= 0 && isMoving(race, ln, now);
         const pen = ln.penalty; const hidden = !pen && !moving;
-        for (let k = ln.babies.length - 1; k >= 0; k--) { const bp = babyPos(race, ln, k); draw(sp(ln.role === 'human' ? '👶' : ln.emoji, Math.round(30 * cfg.babyScale)), bp.x, bp.y, hidden ? 0.55 : 1, rot); }
+        for (let k = ln.babies.length - 1; k >= 0; k--) { const bp = babyPos(race, ln, k); draw(face(ln, ln.role === 'human' ? '👶' : ln.emoji, Math.round(30 * cfg.babyScale)), bp.x, bp.y, hidden ? 0.55 : 1, rot); }
         g.beginPath(); g.arc(p.x, p.y, 17, 0, Math.PI * 2); g.fillStyle = `${ROLE_COLOR[ln.role] || '#9b5cff'}55`; g.fill();
         const body = ln.role === 'human' ? (hidden ? '🧍' : '🏃') : ln.emoji;
         const bob = moving ? Math.sin(nowAbs / 45 + i) * 2 : 0;
-        draw(sp(body, 30), p.x, p.y + bob, pen ? (pen.stage === 'return' ? 0.4 : 0.6) : 1, rot);
+        draw(face(ln, body, 30), p.x, p.y + bob, pen ? (pen.stage === 'return' ? 0.4 : 0.6) : 1, rot);
         if (hidden) draw(sp('🌿', 42), p.x, p.y - 2); // hiding in a bush
         let badge = null;
         if (pen) badge = pen.stage === 'action' ? PEN_BADGE[pen.kind]?.[0] : pen.stage === 'rest' ? PEN_BADGE[pen.kind]?.[1] : null;
@@ -328,7 +343,7 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
         const e = Math.min(1, (nowAbs - finishedAt) / 420); const ln = race.lanes[race.winner]; const p0 = trackPoint(ln.geo, 1);
         if (e < 1) { // hop in an arc from the pool edge to the middle
           const x = p0.x + (lay.goal.x - p0.x) * e, y = p0.y + (lay.goal.y - p0.y) * e - Math.sin(e * Math.PI) * 26;
-          draw(sp(ln.role === 'human' ? '🏃' : ln.emoji, 30), x, y, 1, e * Math.PI * 2);
+          draw(face(ln, ln.role === 'human' ? '🏃' : ln.emoji, 30), x, y, 1, e * Math.PI * 2);
         }
         const s = (nowAbs - finishedAt - 380) / 900;
         if (s > 0 && s < 1) {
@@ -336,7 +351,7 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
           for (let k = 0; k < 2; k++) { g.beginPath(); g.ellipse(lay.goal.x, lay.goal.y, 6 + (s * 46) / (k + 1), (4 + (s * 30)) / (k + 1), 0, 0, Math.PI * 2); g.stroke(); }
           for (let k = 0; k < 6; k++) { const a = -Math.PI / 2 + (k - 2.5) * 0.45; const r = 10 + s * 38; draw(sp('💦', 16), lay.goal.x + Math.cos(a) * r, lay.goal.y + Math.sin(a) * r * 0.8 + s * s * 30, 1 - s); }
         }
-        if (s > 0) draw(sp(ln.role === 'human' ? '🏊' : ln.emoji, 26), lay.goal.x, lay.goal.y + 4 + Math.sin(nowAbs / 160) * 2, Math.min(1, s * 3)); // bobbing in the pool
+        if (s > 0) draw(face(ln, ln.role === 'human' ? '🏊' : ln.emoji, 26), lay.goal.x, lay.goal.y + 4 + Math.sin(nowAbs / 160) * 2, Math.min(1, s * 3)); // bobbing in the pool
       }
       if (race.phase === 'done' && !finishedAt) {
         finishedAt = nowAbs; const win = race.lanes[race.winner];
@@ -365,7 +380,7 @@ export default function RaceBoard({ racers: given, label, onDone, mode = 'normal
             return (
               <button key={`b-${i}`} type="button" className={`race-btn role-${r.role}`} data-tap={i} data-hit="0" ref={(el) => { btnRefs.current[i] = el; }}
                 style={{ left: g.btn.x, top: g.btn.y, width: lay.bR ? lay.bR * 2 : RACE.buttonSize, height: lay.bR ? lay.bR * 2 : RACE.buttonSize, transform: `translate(-50%,-50%) rotate(${g.rot}deg)` }}>
-                <span className="e">{r.role === 'human' ? '🧍' : r.emoji}</span><span className="n">{r.name}{r.star ? ' ⭐' : ''}</span>
+                <span className="e">{r.role === 'human' ? '🧍' : r.pic ? <img className="face-pic" src={r.pic} alt="" width={44} height={44} decoding="async" data-face-pic={r.name} /> : r.emoji}</span><span className="n">{r.name}{r.star ? ' ⭐' : ''}</span>
               </button>
             );
           })}
