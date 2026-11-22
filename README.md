@@ -24,7 +24,7 @@ DATABASE_URL=postgres://... ADMIN_SETUP_SECRET=... COOKIE_INSECURE=1 npm run dev
 Create the first admin once at `/setup` (needs `ADMIN_SETUP_SECRET`).
 
 ## Adding a game
-Add an entry in `lib/games.js` (replace a coming-soon slot) and create its page under `app/play/<game-id>/`.
+Add an entry in `lib/gameSlots.js` (replace a coming-soon slot) and create its page under `app/play/<game-id>/`. The 🎡 end-of-game Party Star wheel is on by default (`wheel: true`): use `components/party/useEndWheel.js` — see "Adding a game" in ARCHITECTURE.md.
 
 ## House rules
 Drink responsibly: a sip is plenty and water always counts.

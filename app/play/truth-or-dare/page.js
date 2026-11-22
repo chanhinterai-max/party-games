@@ -19,18 +19,19 @@ const SurpriseBody = dynamic(loadSurprise, { ssr: false });
 const prefetchGame = () => { loadTimer(); loadSurprise(); loadResults(); loadConfetti(); };
 import AnimalList from '@/components/party/AnimalList';
 import StarAnnounce from '@/components/party/StarAnnounce';
-import StarWheel from '@/components/party/StarWheel';
+import EndWheel from '@/components/party/EndWheel';
+import useEndWheel from '@/components/party/useEndWheel';
 import PlayerRows from '@/components/party/PlayerRows';
 import useNoSelect from '@/components/party/useNoSelect';
 import { STORE_PLAYERS, MIN, MAX, blank, load, save, loadPlayers } from '@/components/party/store';
 
 const STORE_LEVEL = 'partygames.tod.level';
 const STORE_ROOM = 'partygames.tod.room';
-const STORE_PREV = 'partygames.tod.prev'; // v12: last ended Party Star room (its wheel winner = next star)
 const Shimmer = ({ w = '80%', h = 22 }) => <span className="shimmer" style={{ width: w, height: h }} aria-hidden="true" />;
 
 export default function TruthOrDare() {
   useNoSelect();
+  const end = useEndWheel('truth-or-dare'); // v12b 🎡 shared end-of-game step (lib/gameSlots.js wheel flag)
   const [players, setPlayers] = useState([blank(), blank()]);
   const [level, setLevel] = useState('children');
   const [error, setError] = useState('');
@@ -67,7 +68,8 @@ export default function TruthOrDare() {
     }
   }, []);
 
-  useEffect(() => { if (room?.wheel && token) save(STORE_PREV, { code: room.code, token }); }, [room?.wheel, room?.code, token]);
+  // v12b 🎡 shared end-of-game wheel: EVERY ended room (star or not) has room.wheel; its proof starts the next game
+  useEffect(() => { if (room?.wheel && token) end.show(room.wheel, { code: room.code, token }); else end.reset(); }, [room?.wheel, room?.code, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function flash(msg) {
     setToast(msg);
@@ -89,9 +91,9 @@ export default function TruthOrDare() {
     if (noGender.length) { setMissing(noGender); return setError('Pick Male or Female for every player.'); }
     setBusy(true);
     try {
-      const prev = host ? load(STORE_PREV, null) : null; // v12: same group again → the wheel winner is the new Party Star
+      const prev = end.prev(); // v12/v12b: same group again (any room) → the last wheel winner is the new Party Star
       const d = await api('/api/rooms', { method: 'POST', body: { game: 'truth-or-dare', level, players: filled, ...(host ? { host: true } : {}), ...(prev ? { prev } : {}) } });
-      save(STORE_PREV, null);
+      end.clear();
       save(STORE_PLAYERS, filled);
       save(STORE_LEVEL, level);
       save(STORE_ROOM, { code: d.room.code, token: d.token, revealed: false });
@@ -222,7 +224,7 @@ export default function TruthOrDare() {
         </div>
         <p className="room-code">Room code<b data-room-code>{room.code}</b></p>
         {reveal && lc && <div className="closed-banner">🐔 {reveal.player}: {lc.emoji} {reveal.text}</div>}
-        {room.wheel && <StarWheel wheel={room.wheel} label={room.star?.label} />}
+        <EndWheel end={end} label={room.star?.label} />
         <Results room={room} />
         <Confetti />
         <div className="section"><button className="btn btn-primary" data-act="new-game" onClick={endGame}>Play again 🔁</button></div>

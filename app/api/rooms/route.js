@@ -2,7 +2,7 @@ import { route, json, readJson, HttpError } from '@/lib/http';
 import { createRoom, validatePlayers, validateLevel, publicRoom } from '@/lib/game';
 import { isGameEnabled } from '@/lib/games';
 import { throttle, getUser, audit } from '@/lib/auth';
-import { resolveRoomStar, loadPrevRoom } from '@/lib/partystar';
+import { resolveRoomStar, loadPrev } from '@/lib/partystar';
 
 export const POST = route(async (req) => {
   const body = await readJson(req);
@@ -16,8 +16,9 @@ export const POST = route(async (req) => {
   // v11: a room created from an advanced user's landing page ("host") is tagged with its creator and gets the
   // VISIBLE Party Star from that login session (if one was set and a player name matches).
   const user = body.host === true ? await getUser(req) : null;
-  const prevRow = body.host === true && body.prev ? await loadPrevRoom(user, body.prev) : null; // v12: Play again → wheel winner
-  const { creator, star } = await resolveRoomStar(user, body.host === true, game, players, genders, prevRow);
+  // v12/v12b: Play again (ANY room: plain rooms by token, host rooms by token + same login) → the wheel winner is the star
+  const prev = body.prev ? await loadPrev(user, body.prev, game) : null;
+  const { creator, star } = await resolveRoomStar(user, body.host === true, game, players, genders, prev);
   const { token, row } = await createRoom({ game, level, players, genders, creator, star });
   if (creator) await audit(user, 'room_create', row.code, { game, star: star ? star.player : null }, req);
   // v6: animals are public (room.animals) and shown openly on the shared screen.

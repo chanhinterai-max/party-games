@@ -8,7 +8,8 @@ import useNoSelect from '@/components/party/useNoSelect';
 import AnimalList from '@/components/party/AnimalList';
 import StarAnnounce from '@/components/party/StarAnnounce';
 import StarBadge from '@/components/party/StarBadge';
-import StarWheel from '@/components/party/StarWheel';
+import EndWheel from '@/components/party/EndWheel';
+import useEndWheel from '@/components/party/useEndWheel';
 import { STORE_PLAYERS, MAX, blank, save, loadPlayers, checkPlayers } from '@/components/party/store';
 import { makeHeats, needsFinal } from '@/lib/race/heats';
 
@@ -46,20 +47,21 @@ export default function AnimalRace() {
   const [cur, setCur] = useState(0);        // index of the race being run (heats..., then final)
   const [mode, setMode] = useState('normal'); // normal | adult
   const [host, setHost] = useState(false);    // v11: opened from an advanced user's Rooms page (?host=1)
-  const [wheel, setWheel] = useState(null);   // v12 🎡 next-star wheel (hosted Party Star room, at the champion)
+  const end = useEndWheel('animal-race');     // v12b 🎡 shared end-of-game wheel (every race, room or not)
 
   useEffect(() => { if (new URLSearchParams(window.location.search).get('host') === '1') setHost(true); const p = loadPlayers(); if (p) setPlayers(p); try { if (localStorage.getItem(MODE_KEY) === 'adult') setMode('adult'); } catch {} }, []);
   const pickMode = (m) => { setMode(m); try { localStorage.setItem(MODE_KEY, m); } catch {} };
 
-  async function start(prev = null) {
-    setError(''); setMissing([]); setWheel(null);
+  async function start() {
+    setError(''); setMissing([]); end.reset();
     const c = checkPlayers(players);
     if (c.error) { setError(c.error); setMissing(c.missing || []); return; }
     setBusy(true);
     loadBoard(); loadResults(); loadConfetti(); loadMaps(); // fetch the race code while the server deals the animals
     try {
+      const prev = end.prev(); // v12b: last game's wheel proof ({code, token} or {ticket}) → its winner is the ⭐ star
       const d = await api('/api/race/start', { method: 'POST', body: { players: c.filled, ...(host ? { host: true } : {}), ...(prev ? { prev } : {}) } });
-      save(STORE_PLAYERS, c.filled); setPlayers(c.filled);
+      end.clear(); save(STORE_PLAYERS, c.filled); setPlayers(c.filled);
       setGame(d); newPlan(d); setPhase('meet'); window.scrollTo(0, 0);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -96,14 +98,9 @@ export default function AnimalRace() {
   function next() {
     if (isFinal(cur)) {
       setPhase('champion'); window.scrollTo(0, 0);
-      // v11/v12: a hosted race room is ended when the champion is crowned; with a Party Star the server spins the
-      // next-star wheel from the podium (final order) and every phone animates it
-      if (game.room && !game.room.ended) {
-        game.room.ended = true;
-        const order = plan.results[cur].order.map((o) => o.name);
-        api(`/api/rooms/${game.room.code}/action`, { method: 'POST', body: { action: 'race_end', order }, headers: { 'x-room-token': game.room.token } })
-          .then((d) => { if (d.room?.wheel) setWheel(d.room.wheel); }).catch(() => {});
-      }
+      // v12b: EVERY race ends with the 🎡 wheel (shared step): the final ranking goes to the server, which spins it
+      // (hosted room → room game_end, the room is ended; plain race → /api/wheel with the start ticket)
+      end.finish({ order: plan.results[cur].order.map((o) => o.name), room: game.room || null, ticket: game.ticket || null });
       return;
     }
     window.__nextPressAt = performance.now(); // instant-next-heat measurement (press → first board frame)
@@ -218,11 +215,11 @@ export default function AnimalRace() {
         <div className="drink-names">{res.drinkers.map((n) => <b key={n}>{n}</b>)}</div>
         <div className="drink-word">Drink!</div>
       </div>
-      {wheel && <StarWheel wheel={wheel} label={game.star?.label} />}
+      <EndWheel end={end} label={game.star?.label} />
       <Confetti />
       <div className="section row">
         <button className="btn btn-primary" data-act="rematch" disabled={busy}
-          onClick={() => { if (game.room) start({ code: game.room.code, token: game.room.token }); else { newPlan(game); setPhase('meet'); } }}>Again 🔁</button>
+          onClick={() => { if (game.room || end.wheel) start(); else { newPlan(game); setPhase('meet'); } }}>Again 🔁</button>
         <button className="btn btn-ghost" data-act="new-players" onClick={() => { setGame(null); setPlan(null); setPhase('setup'); }}>Players</button>
       </div>
     </>

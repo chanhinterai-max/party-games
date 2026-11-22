@@ -20,8 +20,8 @@ export default function PartyStarPanel() {
       <p className="count">An advanced user sets a name once per login (popup on their Rooms page). In rooms they create,
         the first matching player is <b>blessed</b>: quiet luck for the whole room (drinks, luck re-roll, race strides,
         never the Human, gentler hunters/weather). The {d.label} gets ALL perks incl. the pairing perks, a ⭐ badge and
-        a collapsed perk list everyone can open. Game 1: the blessed player is the {d.label}; after each game a 🎡 wheel
-        picks the next one.</p>
+        a collapsed perk list everyone can open. Game 1: the blessed player is the {d.label}; after EVERY game (every
+        room, signed in or not) a 🎡 wheel picks the next one.</p>
       <label className="field">Role name shown to players (default “{d.labelDefault}”)
         <input className="input" name="star-label" maxLength={24} value={d.label} onChange={(e) => setD({ ...d, label: e.target.value })} />
       </label>
@@ -29,7 +29,8 @@ export default function PartyStarPanel() {
       <StarPerksForm value={d.perks} onChange={(perks) => setD({ ...d, perks })} prefix="admin-star" />
       <div className="label" style={{ marginTop: 12 }}>🎡 Next-star wheel weights</div>
       <p className="count">Slice = base + bonus. Truth or Dare: most dares done get the biggest bonus; the most chicken-outs
-        get the smallest slice. Animal Race: podium bonus. The blessed player’s slice is a bit bigger.</p>
+        get the smallest slice. Animal Race (and any future ranking game): podium bonus. The blessed player’s slice is a bit bigger (rooms without
+        a blessed player: no bonus).</p>
       <div className="star-perks" data-section="wheel-weights">
         {d.wheelFields.map((v) => (
           <label key={v.key} className="star-val">{v.label}
